@@ -28,7 +28,22 @@ async function uploadFilesThenPrompt(files, prompt) {
     fileInput = document.querySelector('input[type="file"]');
   }
 
-  if (fileInput) {
+  // ChatGPT has multiple file inputs: upload-files (docs), upload-photos (images)
+  // When logged in, upload-files accepts all types. When not logged in, only images work.
+  // Try the + button first to trigger the upload menu
+  const plusBtn = document.querySelector('button[aria-label="Attach files"]')
+    || document.querySelector('#composer-actions-button');
+  if (plusBtn) {
+    plusBtn.click();
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Prefer upload-files for documents
+  const docInput = document.getElementById('upload-files');
+  const photoInput = document.getElementById('upload-photos');
+  const targetInput = docInput || photoInput || fileInput;
+
+  if (targetInput) {
     const dt = new DataTransfer();
     for (const f of files) {
       const binary = atob(f.base64);
@@ -38,12 +53,12 @@ async function uploadFilesThenPrompt(files, prompt) {
       const file = new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' });
       dt.items.add(file);
     }
-    fileInput.files = dt.files;
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[Tribunal] Uploaded', files.length, 'files to ChatGPT');
-    await new Promise(r => setTimeout(r, 3000)); // ChatGPT takes longer to process
+    targetInput.files = dt.files;
+    targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+    console.log('[Tribunal] Uploaded', files.length, 'files to ChatGPT via', targetInput.id);
+    await new Promise(r => setTimeout(r, 3000));
   } else {
-    console.log('[Tribunal] No file input found on ChatGPT');
+    console.log('[Tribunal] No file input found on ChatGPT — falling back to text context');
   }
 
   injectPrompt(prompt);
