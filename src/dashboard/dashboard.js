@@ -533,11 +533,11 @@ async function checkConnections() {
   ];
 
   for (const m of models) {
-    const el = document.getElementById(`conn-${m.id}`);
-    if (!el) continue;
-    const dot = el.querySelector('.conn-dot');
-    const status = el.querySelector('.conn-status');
-    const btn = el.querySelector('.conn-btn');
+    const connEl = document.getElementById(`conn-${m.id}`);
+    if (!connEl) continue;
+    const dot = connEl.querySelector('.conn-dot');
+    const status = connEl.querySelector('.conn-status');
+    const btn = connEl.closest('.model-card')?.querySelector('.conn-btn');
 
     try {
       // Ask background to check if this model's tab exists and is logged in
