@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tribunal — AI Multi-Model Validator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #09090b;
+      color: #fafafa;
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      padding: 20px 32px;
+      border-bottom: 1px solid #27272a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(9,9,11,0.85);
+    }
+    .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo span { color: #7c3aed; }
+    .header-right { display: flex; gap: 10px; align-items: center; }
+
+    /* Layout */
+    .container { max-width: 900px; margin: 0 auto; padding: 24px 20px 100px; }
+
+    /* Prompt section */
+    .prompt-section {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    .prompt-section h2 { font-size: 13px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+
+    .model-row { display: flex; gap: 10px; margin-bottom: 16px; }
+    .model-chip {
+      flex: 1;
+      padding: 12px;
+      border: 1px solid #27272a;
+      border-radius: 12px;
+      background: #18181b;
+      color: #a1a1aa;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .model-chip:hover { border-color: #3f3f46; }
+    .model-chip.selected { border-color: #7c3aed; background: rgba(124,58,237,0.1); color: #c4b5fd; }
+    .model-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+    .dot-claude { background: #f59e0b; }
+    .dot-chatgpt { background: #10b981; }
+    .dot-gemini { background: #3b82f6; }
+
+    .pass-row { display: flex; gap: 8px; margin-bottom: 16px; }
+    .pass-chip {
+      padding: 8px 16px;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      background: transparent;
+      color: #71717a;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pass-chip.selected { border-color: #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.08); }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 14px 16px;
+      border: 1px solid #27272a;
+      border-radius: 12px;
+      background: #09090b;
+      color: #fafafa;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+      margin-bottom: 12px;
+    }
+    textarea:focus { border-color: #7c3aed; outline: none; }
+    textarea::placeholder { color: #52525b; }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .file-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: 1px dashed #27272a;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #71717a;
+      transition: all 0.15s;
+    }
+    .file-label:hover { border-color: #3f3f46; color: #a1a1aa; }
+    .file-label input { display: none; }
+    .file-name { font-size: 11px; color: #71717a; }
+
+    .btn-start {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-start:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124,58,237,0.3); }
+    .btn-start:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* Progress */
+    .progress-bar {
+      background: #27272a;
+      border-radius: 4px;
+      height: 6px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a78bfa);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #71717a;
+      margin-bottom: 6px;
+    }
+
+    /* Discussion feed */
+    .discussion { display: flex; flex-direction: column; gap: 16px; }
+
+    .turn-card {
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 14px;
+      overflow: hidden;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .turn-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #27272a;
+    }
+    .turn-model { font-weight: 600; font-size: 13px; }
+    .turn-role {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(124,58,237,0.1);
+      color: #a78bfa;
+    }
+    .turn-time { font-size: 10px; color: #52525b; margin-left: auto; }
+    .turn-body {
+      padding: 16px 18px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #d4d4d8;
+      white-space: pre-wrap;
+    }
+
+    .turn-card.claude .turn-header { border-left: 3px solid #f59e0b; }
+    .turn-card.chatgpt .turn-header { border-left: 3px solid #10b981; }
+    .turn-card.gemini .turn-header { border-left: 3px solid #3b82f6; }
+
+    /* Synthesis card */
+    .synthesis-card {
+      background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(59,130,246,0.05));
+      border: 1px solid rgba(124,58,237,0.3);
+      border-radius: 14px;
+      padding: 20px;
+      margin-top: 8px;
+    }
+    .synthesis-card h3 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Action buttons */
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      border: 1px solid #27272a;
+      background: #18181b;
+      color: #d4d4d8;
+    }
+    .btn:hover { border-color: #3f3f46; background: #27272a; }
+    .btn-primary { background: #7c3aed; border-color: #7c3aed; color: white; }
+    .btn-primary:hover { background: #6d28d9; }
+
+    /* Toggle tabs */
+    .toggle-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      cursor: pointer;
+      border: 1px solid #27272a;
+      background: #18181b;
+      color: #71717a;
+      transition: all 0.15s;
+    }
+    .toggle-tabs:hover { color: #d4d4d8; border-color: #3f3f46; }
+    .toggle-tabs.active { border-color: #f59e0b; color: #f59e0b; }
+
+    /* Waiting indicator */
+    .waiting {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 18px;
+      background: #18181b;
+      border: 1px solid #27272a;
+      border-radius: 14px;
+      font-size: 13px;
+      color: #71717a;
+    }
+    .waiting .dots span {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #7c3aed;
+      animation: bounce 1s infinite;
+      margin-right: 3px;
+    }
+    .waiting .dots span:nth-child(2) { animation-delay: 0.15s; }
+    .waiting .dots span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40% { transform: translateY(-8px); }
+    }
+
+    .hidden { display: none; }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #52525b;
+    }
+    .empty-state h2 { font-size: 20px; color: #a1a1aa; margin-bottom: 8px; }
+    .empty-state p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo"><span>T</span>ribunal</div>
+    <div class="header-right">
+      <button class="toggle-tabs" id="toggle-tabs-btn" title="Show/hide LLM browser tabs">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+        Show LLM Tabs
+      </button>
+      <button class="btn" id="history-btn">History</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- New Session -->
+    <div id="setup-section">
+      <div class="prompt-section">
+        <h2>Starting Model</h2>
+        <div class="model-row">
+          <button class="model-chip selected" data-model="claude">
+            <span class="dot dot-claude"></span>Claude
+          </button>
+          <button class="model-chip" data-model="chatgpt">
+            <span class="dot dot-chatgpt"></span>ChatGPT
+          </button>
+          <button class="model-chip" data-model="gemini">
+            <span class="dot dot-gemini"></span>Gemini
+          </button>
+        </div>
+
+        <h2>Discussion Passes</h2>
+        <div class="pass-row">
+          <button class="pass-chip selected" data-passes="1">1 pass</button>
+          <button class="pass-chip" data-passes="3">3 passes</button>
+          <button class="pass-chip" data-passes="5">5 passes</button>
+          <button class="pass-chip" data-passes="10">10 passes</button>
+        </div>
+
+        <h2>Your Prompt</h2>
+        <textarea id="prompt-input" placeholder="Enter your prompt here. The models will discuss, critique, and refine the answer through structured back-and-forth."></textarea>
+
+        <div class="file-row">
+          <label class="file-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            Attach document
+            <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv">
+          </label>
+          <span class="file-name" id="file-name"></span>
+        </div>
+
+        <button class="btn-start" id="start-btn">Start Discussion</button>
+      </div>
+    </div>
+
+    <!-- Active Discussion -->
+    <div id="discussion-section" class="hidden">
+      <div class="progress-label">
+        <span>Pass <span id="pass-current">1</span> of <span id="pass-total">1</span></span>
+        <span id="turn-count">0</span> turns
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+      </div>
+
+      <div class="discussion" id="discussion-feed"></div>
+
+      <!-- Waiting indicator -->
+      <div class="waiting hidden" id="waiting-indicator">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <span id="waiting-text">Waiting for Claude to respond...</span>
+      </div>
+
+      <!-- Final synthesis -->
+      <div class="synthesis-card hidden" id="synthesis-card">
+        <h3>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Final Synthesized Answer
+        </h3>
+        <div id="synthesis-content" style="font-size: 14px; line-height: 1.7; color: #d4d4d8; white-space: pre-wrap;"></div>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions" id="action-buttons" style="display: none;">
+        <button class="btn btn-primary" id="new-btn">New Session</button>
+        <button class="btn" id="copy-btn">Copy Final Answer</button>
+        <button class="btn" id="export-btn">Export Markdown</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="dashboard.js" type="module"></script>
+</body>
+</html>

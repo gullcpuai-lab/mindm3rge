@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Tribunal — AI Multi-Model Validator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Submit one prompt, have multiple AI models critique and validate each other's reasoning.",
   "permissions": [
     "activeTab",
     "storage",
     "tabs",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "https://claude.ai/*",
@@ -37,12 +38,17 @@
     }
   ],
   "action": {
-    "default_popup": "src/popup/popup.html",
-    "default_title": "Tribunal"
+    "default_title": "Tribunal — Open Dashboard"
   },
   "icons": {
     "16": "public/icons/icon16.png",
     "48": "public/icons/icon48.png",
     "128": "public/icons/icon128.png"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["src/dashboard/*", "src/popup/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
 }

@@ -15,16 +15,38 @@ const MODEL_NAMES = {
   gemini: 'Gemini',
 };
 
-// Listen for messages from popup and content scripts
+// Track LLM tab IDs for show/hide
+const llmTabIds = new Set();
+let hideTabs = true;
+
+// Open dashboard when extension icon is clicked
+chrome.action.onClicked.addListener(() => {
+  const dashboardUrl = chrome.runtime.getURL('src/dashboard/dashboard.html');
+  chrome.tabs.query({ url: dashboardUrl }, (tabs) => {
+    if (tabs.length > 0) {
+      chrome.tabs.update(tabs[0].id, { active: true });
+    } else {
+      chrome.tabs.create({ url: dashboardUrl });
+    }
+  });
+});
+
+// Listen for messages from dashboard and content scripts
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'START_SESSION') {
     handleStartSession(message.data).then(sendResponse);
-    return true; // async response
+    return true;
   }
 
   if (message.type === 'RESPONSE_CAPTURED') {
     handleResponseCaptured(message.data, sender.tab).then(sendResponse);
     return true;
+  }
+
+  if (message.type === 'TOGGLE_TABS') {
+    handleToggleTabs(message.visible);
+    sendResponse({ ok: true });
+    return false;
   }
 
   if (message.type === 'GET_STATUS') {
@@ -195,18 +217,40 @@ function getNextAction(session) {
   return { done: true };
 }
 
+function handleToggleTabs(visible) {
+  hideTabs = !visible;
+  for (const tabId of llmTabIds) {
+    // Chrome doesn't have a true "hide" API, but we can minimize the tab's visibility
+    // by switching to the dashboard tab when hiding
+    if (!visible) {
+      // Find dashboard tab and activate it
+      const dashUrl = chrome.runtime.getURL('src/dashboard/dashboard.html');
+      chrome.tabs.query({ url: dashUrl }, (tabs) => {
+        if (tabs.length > 0) chrome.tabs.update(tabs[0].id, { active: true });
+      });
+    }
+  }
+}
+
 async function sendToModel(model, prompt) {
   const url = MODEL_URLS[model];
 
   // Find or create tab for this model
-  const tabs = await chrome.tabs.query({ url: `${url.split('/')[0]}//${url.split('/')[2]}/*` });
+  const domain = `${url.split('/')[0]}//${url.split('/')[2]}/*`;
+  const tabs = await chrome.tabs.query({ url: domain });
   let tab;
 
   if (tabs.length > 0) {
     tab = tabs[0];
-    await chrome.tabs.update(tab.id, { active: true });
+    // Only bring to front if tabs are visible
+    if (!hideTabs) {
+      await chrome.tabs.update(tab.id, { active: true });
+    }
   } else {
-    tab = await chrome.tabs.create({ url, active: true });
+    // Create tab — hidden (not active) if hideTabs is on
+    tab = await chrome.tabs.create({ url, active: !hideTabs });
+    llmTabIds.add(tab.id);
+
     // Wait for page to load
     await new Promise(resolve => {
       chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
