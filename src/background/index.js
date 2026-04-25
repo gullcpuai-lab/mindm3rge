@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleStartSession(data) {
-  const { prompt, starterModel, passes, fileContent, files } = data;
+  const { prompt, starterModel, passes, fileContent, files, directives } = data;
 
   const fullPrompt = fileContent
     ? `${prompt}\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`
@@ -84,8 +84,9 @@ async function handleStartSession(data) {
     currentModel: starterModel,
     modelOrder: [starterModel, ...otherModels],
     turns: [],
-    files: files || [], // store files for uploading to each model
-    filesUploaded: {}, // track which models have received the files
+    files: files || [],
+    filesUploaded: {},
+    directives: directives || [],
     status: 'running',
     createdAt: new Date().toISOString(),
   };
@@ -155,30 +156,29 @@ function getNextAction(session) {
   const otherModels = modelOrder.filter(m => m !== starterModel);
 
   if (currentStep === 'initial') {
-    // After initial response, first other model critiques
     const prompt = buildCritiquePrompt(
       session.prompt,
       MODEL_NAMES[starterModel],
       turns[turns.length - 1].content,
       currentPass,
-      passes
+      passes,
+      session.directives
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
 
   if (currentStep === 'critique') {
-    // Check if all other models have critiqued this pass
     const critiquesThisPass = turns.filter(t => t.role === 'critique' && t.round === currentPass);
     const uncritiqued = otherModels.filter(m => !critiquesThisPass.some(t => t.model === m));
 
     if (uncritiqued.length > 0) {
-      // More models need to critique
       const prompt = buildCritiquePrompt(
         session.prompt,
         turns.find(t => t.round === currentPass && (t.role === 'initial' || t.role === 'revision'))?.modelName || MODEL_NAMES[starterModel],
         turns.find(t => t.round === currentPass && (t.role === 'initial' || t.role === 'revision'))?.content || '',
         currentPass,
-        passes
+        passes,
+        session.directives
       );
       return { done: false, model: uncritiqued[0], step: 'critique', pass: currentPass, prompt };
     }
@@ -201,13 +201,13 @@ function getNextAction(session) {
   }
 
   if (currentStep === 'revision') {
-    // After revision, other models critique again
     const prompt = buildCritiquePrompt(
       session.prompt,
       MODEL_NAMES[session.currentModel],
       turns[turns.length - 1].content,
       currentPass,
-      passes
+      passes,
+      session.directives
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }

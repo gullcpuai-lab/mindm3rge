@@ -265,6 +265,62 @@
     .toggle-tabs:hover { color: #d4d4d8; border-color: #3f3f46; }
     .toggle-tabs.active { border-color: #f59e0b; color: #f59e0b; }
 
+    /* Directives */
+    .directives-section { margin-bottom: 16px; }
+    .directive-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .directive-chip {
+      padding: 6px 12px;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #a1a1aa;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: transparent;
+    }
+    .directive-chip:hover { border-color: #3f3f46; color: #d4d4d8; }
+    .directive-chip.selected { border-color: #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.08); }
+    .custom-directives { display: flex; flex-direction: column; gap: 6px; }
+    .custom-directive-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .custom-directive-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #27272a;
+      border-radius: 8px;
+      background: #09090b;
+      color: #fafafa;
+      font-size: 12px;
+    }
+    .custom-directive-row input:focus { border-color: #7c3aed; outline: none; }
+    .custom-directive-row button {
+      padding: 6px 8px;
+      border: none;
+      background: none;
+      color: #52525b;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .custom-directive-row button:hover { color: #ef4444; }
+    .add-directive-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border: 1px dashed #27272a;
+      border-radius: 8px;
+      background: transparent;
+      color: #52525b;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.15s;
+      width: fit-content;
+    }
+    .add-directive-btn:hover { border-color: #3f3f46; color: #a1a1aa; }
+
     /* Waiting indicator */
     .waiting {
       display: flex;
@@ -344,6 +400,31 @@
 
         <h2>Your Prompt</h2>
         <textarea id="prompt-input" placeholder="Enter your prompt here. The models will discuss, critique, and refine the answer through structured back-and-forth."></textarea>
+
+        <h2>Review Directives</h2>
+        <p style="font-size: 11px; color: #52525b; margin-bottom: 8px;">Select what you want the models to focus on when critiquing each other:</p>
+        <div class="directives-section">
+          <div class="directive-chips" id="directive-chips">
+            <button class="directive-chip selected" data-directive="strengths-weaknesses">Strengths &amp; Weaknesses</button>
+            <button class="directive-chip selected" data-directive="factual-accuracy">Factual Accuracy</button>
+            <button class="directive-chip selected" data-directive="logical-gaps">Logical Gaps</button>
+            <button class="directive-chip" data-directive="legal-sufficiency">Legal Sufficiency</button>
+            <button class="directive-chip" data-directive="risk-analysis">Risk Analysis</button>
+            <button class="directive-chip" data-directive="alternative-approaches">Alternative Approaches</button>
+            <button class="directive-chip" data-directive="evidence-alignment">Evidence Alignment</button>
+            <button class="directive-chip" data-directive="bias-detection">Bias Detection</button>
+            <button class="directive-chip" data-directive="completeness">Completeness</button>
+            <button class="directive-chip" data-directive="clarity-readability">Clarity &amp; Readability</button>
+            <button class="directive-chip" data-directive="counterarguments">Counterarguments</button>
+            <button class="directive-chip" data-directive="code-review">Code Review</button>
+            <button class="directive-chip" data-directive="security-analysis">Security Analysis</button>
+          </div>
+          <div class="custom-directives" id="custom-directives"></div>
+          <button class="add-directive-btn" id="add-custom-directive">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add custom directive
+          </button>
+        </div>
 
         <div class="file-section">
           <label class="file-label">

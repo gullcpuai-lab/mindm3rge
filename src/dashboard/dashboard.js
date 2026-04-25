@@ -5,8 +5,26 @@ const MODEL_NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
 
 let selectedModel = 'claude';
 let selectedPasses = 1;
-let uploadedFiles = []; // { name, size, content }
+let uploadedFiles = [];
 let tabsVisible = false;
+let customDirectives = [];
+
+// Directive descriptions for prompt building
+const DIRECTIVE_LABELS = {
+  'strengths-weaknesses': 'Identify strengths and weaknesses in the reasoning',
+  'factual-accuracy': 'Verify factual accuracy and flag unsupported claims',
+  'logical-gaps': 'Identify logical gaps, fallacies, or unsound reasoning',
+  'legal-sufficiency': 'Evaluate legal sufficiency, procedural requirements, and statutory compliance',
+  'risk-analysis': 'Analyze risks, assumptions, and potential failure points',
+  'alternative-approaches': 'Suggest alternative approaches, frameworks, or strategies',
+  'evidence-alignment': 'Check if conclusions are supported by the provided evidence',
+  'bias-detection': 'Detect cognitive biases, confirmation bias, or one-sided reasoning',
+  'completeness': 'Identify missing information, overlooked factors, or incomplete analysis',
+  'clarity-readability': 'Evaluate clarity, structure, and readability of the response',
+  'counterarguments': 'Present counterarguments and devil\'s advocate perspectives',
+  'code-review': 'Review code for bugs, security vulnerabilities, and best practices',
+  'security-analysis': 'Analyze security implications, attack vectors, and vulnerabilities',
+};
 
 // Model selection
 document.querySelectorAll('.model-chip').forEach(btn => {
@@ -25,6 +43,59 @@ document.querySelectorAll('.pass-chip').forEach(btn => {
     selectedPasses = parseInt(btn.dataset.passes);
   });
 });
+
+// Directive chip selection
+document.querySelectorAll('.directive-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    chip.classList.toggle('selected');
+  });
+});
+
+// Custom directives
+document.getElementById('add-custom-directive').addEventListener('click', () => {
+  const id = 'custom_' + Date.now();
+  customDirectives.push({ id, text: '' });
+  renderCustomDirectives();
+});
+
+function renderCustomDirectives() {
+  const container = document.getElementById('custom-directives');
+  container.innerHTML = customDirectives.map(d => `
+    <div class="custom-directive-row">
+      <input type="text" value="${d.text}" placeholder="e.g., Check for HIPAA compliance" data-id="${d.id}"
+        oninput="this.closest('.custom-directive-row').querySelector('input').value">
+      <button data-remove="${d.id}" title="Remove">&times;</button>
+    </div>
+  `).join('');
+
+  // Wire up input changes
+  container.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', (e) => {
+      const dir = customDirectives.find(d => d.id === e.target.dataset.id);
+      if (dir) dir.text = e.target.value;
+    });
+  });
+
+  // Wire up remove buttons
+  container.querySelectorAll('button[data-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      customDirectives = customDirectives.filter(d => d.id !== btn.dataset.remove);
+      renderCustomDirectives();
+    });
+  });
+}
+
+function getSelectedDirectives() {
+  const selected = [];
+  document.querySelectorAll('.directive-chip.selected').forEach(chip => {
+    const key = chip.dataset.directive;
+    selected.push(DIRECTIVE_LABELS[key] || key);
+  });
+  customDirectives.forEach(d => {
+    if (d.text.trim()) selected.push(d.text.trim());
+  });
+  return selected;
+}
 
 // File upload — multi-file support (up to 10)
 document.getElementById('file-input').addEventListener('change', async (e) => {
@@ -124,8 +195,9 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         prompt,
         starterModel: selectedModel,
         passes: selectedPasses,
-        fileContent: buildFileContext(), // text fallback
+        fileContent: buildFileContext(),
         files: uploadedFiles.map(f => ({ name: f.name, base64: f.base64, mimeType: f.mimeType })),
+        directives: getSelectedDirectives(),
         hideTabs: true,
       },
     });

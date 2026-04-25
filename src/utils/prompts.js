@@ -1,6 +1,10 @@
 // Critique prompt templates for multi-model validation
 
-export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds) {
+export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives) {
+  const directiveBlock = directives && directives.length > 0
+    ? `\n\nFOCUS YOUR CRITIQUE ON THESE SPECIFIC AREAS:\n${directives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n`
+    : '';
+
   return `You are participating in a multi-model validation process (Round ${roundNumber}/${totalRounds}).
 
 ORIGINAL USER PROMPT:
@@ -8,7 +12,7 @@ ${originalPrompt}
 
 ${previousModelName.toUpperCase()}'S RESPONSE:
 ${previousResponse}
-
+${directiveBlock}
 Please provide a thorough, structured critique of the above response:
 
 1. **STRENGTHS**: What is correct, well-reasoned, or valuable in this response?
