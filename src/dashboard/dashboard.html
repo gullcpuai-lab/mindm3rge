@@ -82,10 +82,10 @@
       flex: 1; padding: 16px 18px; border-radius: 14px; position: relative; overflow: hidden;
       border: 1px solid var(--border);
     }
-    .stat::before { content: ''; position: absolute; inset: 0; opacity: 0.15; border-radius: 14px; }
-    .stat.s1::before { background: linear-gradient(135deg, #7c5cfc, #4facfe); }
-    .stat.s2::before { background: linear-gradient(135deg, #00d4aa, #4facfe); }
-    .stat.s3::before { background: linear-gradient(135deg, #f857a6, #ff5858); }
+    .stat::before { content: ''; position: absolute; inset: 0; opacity: 0.12; border-radius: 14px; }
+    .stat.s1::before { background: linear-gradient(135deg, #7c5cfc, #9f7aea); }
+    .stat.s2::before { background: linear-gradient(135deg, #7c5cfc, #00d4aa); }
+    .stat.s3::before { background: linear-gradient(135deg, #9f7aea, #7c5cfc); }
     .stat-label { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; position: relative; }
     .stat-value { font-size: 22px; font-weight: 700; position: relative; }
     .stat-sub { font-size: 10px; color: var(--text3); margin-top: 2px; position: relative; }
@@ -316,7 +316,7 @@
 
     /* Connection status (inline in model cards) */
     .mc-conn {
-      display: flex; align-items: center; gap: 4px; margin-top: 4px;
+      display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 4px;
     }
     .conn-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; transition: background 0.3s; }
     .conn-status { font-size: 9px; }
