@@ -258,6 +258,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         starterModel: selectedModel,
         passes: selectedPasses,
         models: [...participatingModels],
+        modelRoles: getModelRoles(),
         fileContent: buildFileContext(),
         files: uploadedFiles.map(f => ({ name: f.name, base64: f.base64, mimeType: f.mimeType })),
         directives: getSelectedDirectives(),
@@ -496,12 +497,27 @@ function createTurnCard(turn) {
       <span class="turn-badge">${roleLabels[turn.role] || turn.role}</span>
       <span class="turn-meta">R${turn.round} · ${time}</span>
       <div class="turn-actions">
-        <button class="turn-act pin-btn" title="Pin this response" data-turn="${turnId}">&#128204;</button>
-        <button class="turn-act ann-btn" title="Add annotation" data-turn="${turnId}">&#128221;</button>
+        <button class="turn-act pin-btn" title="Pin" data-turn="${turnId}">&#128204;</button>
+        <button class="turn-act ann-btn" title="Annotate" data-turn="${turnId}">&#128221;</button>
+        <button class="turn-act retry" title="Retry this turn" data-turn="${turnId}">&#8635;</button>
       </div>
     </div>
     <div class="turn-body">${escapeHtml(turn.content)}</div>
   `;
+
+  // Collapsible (6) — auto-collapse long responses
+  const body = card.querySelector('.turn-body');
+  if (turn.content.length > 400) {
+    body.classList.add('collapsed');
+    const toggle = document.createElement('button');
+    toggle.className = 'turn-toggle';
+    toggle.innerHTML = '&#9660; Show more';
+    toggle.addEventListener('click', () => {
+      const isCollapsed = body.classList.toggle('collapsed');
+      toggle.innerHTML = isCollapsed ? '&#9660; Show more' : '&#9650; Show less';
+    });
+    card.appendChild(toggle);
+  }
 
   // Pin button
   card.querySelector('.pin-btn').addEventListener('click', (e) => {
@@ -526,6 +542,16 @@ function createTurnCard(turn) {
     });
     card.appendChild(input);
     input.focus();
+  });
+
+  // Retry button (9)
+  card.querySelector('.retry').addEventListener('click', async () => {
+    const retryBtn = card.querySelector('.retry');
+    retryBtn.classList.add('retrying');
+    try {
+      await chrome.runtime.sendMessage({ type: 'RETRY_TURN', turnIndex: turn.index });
+    } catch {}
+    setTimeout(() => retryBtn.classList.remove('retrying'), 3000);
   });
 
   return card;
@@ -649,7 +675,7 @@ document.getElementById('share-btn')?.addEventListener('click', async () => {
   }
 
   document.getElementById('share-summary').textContent = summary;
-  document.getElementById('share-modal').classList.remove('hidden');
+  document.getElementById('share-modal').style.display = 'flex';
 });
 
 document.getElementById('share-copy')?.addEventListener('click', () => {
@@ -660,7 +686,59 @@ document.getElementById('share-copy')?.addEventListener('click', () => {
 });
 
 document.getElementById('share-close')?.addEventListener('click', () => {
-  document.getElementById('share-modal').classList.add('hidden');
+  document.getElementById('share-modal').style.display = 'none';
+});
+
+// ═══ Session history (1) ═══
+// ═══ Model roles (7) ═══
+function getModelRoles() {
+  const roles = {};
+  document.querySelectorAll('.role-select').forEach(sel => {
+    if (sel.value) roles[sel.dataset.model] = sel.value;
+  });
+  return roles;
+}
+
+const ROLE_INSTRUCTIONS = {
+  advocate: 'You are playing Devil\'s Advocate. Challenge every assumption, argue the opposing side, and identify every possible weakness.',
+  factcheck: 'You are a Fact Checker. Focus exclusively on verifying factual claims, identifying unsourced assertions, and checking logical consistency.',
+  legal: 'You are a Legal Expert. Analyze from a legal perspective — statutory requirements, case law, procedural compliance, and litigation risk.',
+  technical: 'You are a Technical Reviewer. Focus on implementation details, feasibility, scalability, edge cases, and technical accuracy.',
+  creative: 'You are a Creative Thinker. Propose unconventional approaches, reframe the problem, and suggest ideas others might overlook.',
+};
+
+// ═══ Feedback widget (17) ═══
+document.getElementById('feedback-fab')?.addEventListener('click', () => {
+  document.getElementById('feedback-panel').classList.toggle('hidden');
+});
+document.getElementById('feedback-close')?.addEventListener('click', () => {
+  document.getElementById('feedback-panel').classList.add('hidden');
+});
+document.getElementById('feedback-send')?.addEventListener('click', () => {
+  const text = document.getElementById('feedback-text').value.trim();
+  if (!text) return;
+  // Store feedback locally (could be sent to a server later)
+  try {
+    chrome.storage?.local?.get('feedback', (result) => {
+      const feedbacks = result?.feedback || [];
+      feedbacks.push({ text, timestamp: new Date().toISOString() });
+      chrome.storage.local.set({ feedback: feedbacks });
+    });
+  } catch {}
+  document.getElementById('feedback-text').value = '';
+  document.getElementById('feedback-panel').classList.add('hidden');
+  // Show confirmation
+  const fab = document.getElementById('feedback-fab');
+  fab.textContent = '✓';
+  setTimeout(() => { fab.textContent = '💬'; }, 2000);
+});
+
+// ═══ Referral (18) ═══
+document.getElementById('referral-copy')?.addEventListener('click', () => {
+  const input = document.getElementById('referral-url');
+  navigator.clipboard.writeText(input.value);
+  document.getElementById('referral-copy').textContent = 'Copied!';
+  setTimeout(() => { document.getElementById('referral-copy').textContent = 'Copy'; }, 2000);
 });
 
 // ═══ Session history (1) ═══
