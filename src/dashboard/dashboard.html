@@ -377,15 +377,31 @@
     <!-- New Session -->
     <div id="setup-section">
       <div class="prompt-section">
+        <h2>Participating Models</h2>
+        <p style="font-size: 11px; color: #52525b; margin-bottom: 8px;">Select which models to include, then choose which one starts:</p>
+        <div class="model-row" style="margin-bottom: 8px;">
+          <label class="model-chip selected" data-model="claude" style="position: relative;">
+            <input type="checkbox" class="model-toggle" data-model="claude" checked style="position: absolute; top: 6px; right: 6px; accent-color: #7c3aed; width: 14px; height: 14px;">
+            <span class="dot dot-claude"></span>Claude
+          </label>
+          <label class="model-chip selected" data-model="chatgpt" style="position: relative;">
+            <input type="checkbox" class="model-toggle" data-model="chatgpt" checked style="position: absolute; top: 6px; right: 6px; accent-color: #7c3aed; width: 14px; height: 14px;">
+            <span class="dot dot-chatgpt"></span>ChatGPT
+          </label>
+          <label class="model-chip selected" data-model="gemini" style="position: relative;">
+            <input type="checkbox" class="model-toggle" data-model="gemini" checked style="position: absolute; top: 6px; right: 6px; accent-color: #7c3aed; width: 14px; height: 14px;">
+            <span class="dot dot-gemini"></span>Gemini
+          </label>
+        </div>
         <h2>Starting Model</h2>
         <div class="model-row">
-          <button class="model-chip selected" data-model="claude">
+          <button class="model-chip selected starter-chip" data-model="claude">
             <span class="dot dot-claude"></span>Claude
           </button>
-          <button class="model-chip" data-model="chatgpt">
+          <button class="model-chip starter-chip" data-model="chatgpt">
             <span class="dot dot-chatgpt"></span>ChatGPT
           </button>
-          <button class="model-chip" data-model="gemini">
+          <button class="model-chip starter-chip" data-model="gemini">
             <span class="dot dot-gemini"></span>Gemini
           </button>
         </div>
@@ -398,7 +414,7 @@
           <button class="pass-chip" data-passes="10">10</button>
           <button class="pass-chip" data-passes="15">15</button>
           <button class="pass-chip" data-passes="20">20</button>
-          <input type="number" id="custom-passes" min="1" max="50" placeholder="#" style="width: 52px; padding: 8px 6px; border: 1px solid #27272a; border-radius: 8px; background: #09090b; color: #fafafa; font-size: 12px; text-align: center;" title="Custom number of passes">
+          <input type="number" id="custom-passes" min="1" placeholder="#" style="width: 52px; padding: 8px 6px; border: 1px solid #27272a; border-radius: 8px; background: #09090b; color: #fafafa; font-size: 12px; text-align: center;" title="Custom number of passes">
         </div>
 
         <h2>Your Prompt</h2>

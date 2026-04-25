@@ -63,14 +63,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleStartSession(data) {
-  const { prompt, starterModel, passes, fileContent, files, directives } = data;
+  const { prompt, starterModel, passes, models, fileContent, files, directives } = data;
 
   const fullPrompt = fileContent
     ? `${prompt}\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`
     : prompt;
 
-  // Determine model order
-  const allModels = ['claude', 'chatgpt', 'gemini'];
+  // Determine model order from selected participants
+  const allModels = models || ['claude', 'chatgpt', 'gemini'];
   const otherModels = allModels.filter(m => m !== starterModel);
 
   const session = {

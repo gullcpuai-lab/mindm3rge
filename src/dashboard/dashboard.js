@@ -5,6 +5,7 @@ const MODEL_NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
 
 let selectedModel = 'claude';
 let selectedPasses = 1;
+let participatingModels = new Set(['claude', 'chatgpt', 'gemini']);
 let uploadedFiles = [];
 let tabsVisible = false;
 let customDirectives = [];
@@ -26,10 +27,43 @@ const DIRECTIVE_LABELS = {
   'security-analysis': 'Analyze security implications, attack vectors, and vulnerabilities',
 };
 
-// Model selection
-document.querySelectorAll('.model-chip').forEach(btn => {
+// Model participation toggles
+document.querySelectorAll('.model-toggle').forEach(toggle => {
+  toggle.addEventListener('change', (e) => {
+    const model = e.target.dataset.model;
+    const label = e.target.closest('.model-chip');
+    if (e.target.checked) {
+      participatingModels.add(model);
+      label.classList.add('selected');
+    } else {
+      // Must have at least 2 models
+      if (participatingModels.size <= 2) {
+        e.target.checked = true;
+        return;
+      }
+      participatingModels.delete(model);
+      label.classList.remove('selected');
+      // If the removed model was the starter, switch starter
+      if (selectedModel === model) {
+        const first = [...participatingModels][0];
+        selectedModel = first;
+        document.querySelectorAll('.starter-chip').forEach(b => {
+          b.classList.toggle('selected', b.dataset.model === first);
+        });
+      }
+    }
+    // Update starter chip visibility
+    document.querySelectorAll('.starter-chip').forEach(b => {
+      b.style.display = participatingModels.has(b.dataset.model) ? '' : 'none';
+    });
+  });
+});
+
+// Starting model selection
+document.querySelectorAll('.starter-chip').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.model-chip').forEach(b => b.classList.remove('selected'));
+    if (!participatingModels.has(btn.dataset.model)) return;
+    document.querySelectorAll('.starter-chip').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedModel = btn.dataset.model;
   });
@@ -51,7 +85,7 @@ document.getElementById('custom-passes').addEventListener('input', (e) => {
   const val = parseInt(e.target.value);
   if (val > 0) {
     document.querySelectorAll('.pass-chip').forEach(b => b.classList.remove('selected'));
-    selectedPasses = Math.min(val, 50);
+    selectedPasses = val;
     e.target.style.borderColor = '#7c3aed';
   } else {
     e.target.style.borderColor = '#27272a';
@@ -209,6 +243,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         prompt,
         starterModel: selectedModel,
         passes: selectedPasses,
+        models: [...participatingModels],
         fileContent: buildFileContext(),
         files: uploadedFiles.map(f => ({ name: f.name, base64: f.base64, mimeType: f.mimeType })),
         directives: getSelectedDirectives(),
