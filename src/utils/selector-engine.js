@@ -299,8 +299,8 @@ export function reportError(model, elementType, details) {
   try {
     chrome.runtime.sendMessage(report);
   } catch (e) {
-    console.error('[Tribunal] Failed to send error report:', e);
+    console.error('[MindM3rge] Failed to send error report:', e);
   }
 
-  console.warn(`[Tribunal] Selector broken: ${model}.${elementType}`, details);
+  console.warn(`[MindM3rge] Selector broken: ${model}.${elementType}`, details);
 }

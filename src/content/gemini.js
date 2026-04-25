@@ -60,7 +60,7 @@ function findAll(type) {
 }
 
 function reportBroken(elementType, details) {
-  console.warn(`[Tribunal] Gemini selector broken: ${elementType}`, details);
+  console.warn(`[MindM3rge] Gemini selector broken: ${elementType}`, details);
   try {
     chrome.runtime.sendMessage({
       type: 'SELECTOR_ERROR',
@@ -84,7 +84,7 @@ setTimeout(() => {
       reportBroken(type, { status: 'not found on page load' });
     }
   }
-  console.log('[Tribunal] Gemini health check:', report);
+  console.log('[MindM3rge] Gemini health check:', report);
   try {
     chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'gemini', report });
   } catch {}
@@ -147,14 +147,14 @@ async function uploadFilesThenPrompt(files, prompt) {
     }
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[Tribunal] Uploaded', files.length, 'files to Gemini natively');
+    console.log('[MindM3rge] Uploaded', files.length, 'files to Gemini natively');
     uploaded = true;
     await new Promise(r => setTimeout(r, 2000));
   }
 
   if (!uploaded) {
     // Fallback: inject file content as text in the prompt
-    console.log('[Tribunal] Gemini native upload not available — injecting file content as text');
+    console.log('[MindM3rge] Gemini native upload not available — injecting file content as text');
     reportBroken('fileInput', { context: 'upload attempt - falling back to text injection' });
     const fileContext = files.map((f, i) => {
       try {
@@ -175,14 +175,14 @@ function injectPrompt(prompt) {
   const input = result.el;
 
   if (!input) {
-    console.error('[Tribunal] Could not find Gemini input field');
+    console.error('[MindM3rge] Could not find Gemini input field');
     reportBroken('input', { context: 'inject prompt', method: result.method });
     setTimeout(() => injectPrompt(prompt), 2000);
     return;
   }
 
   if (result.method === 'discovery') {
-    console.log('[Tribunal] Gemini input found via auto-discovery');
+    console.log('[MindM3rge] Gemini input found via auto-discovery');
   }
 
   input.focus();

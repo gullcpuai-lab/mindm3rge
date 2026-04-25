@@ -49,7 +49,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'HEALTH_CHECK_REPORT') {
-    console.log('[Tribunal] Health check:', JSON.stringify(message.report, null, 2));
+    console.log('[MindM3rge] Health check:', JSON.stringify(message.report, null, 2));
     // Store for debugging
     chrome.storage.local.get('errorLogs', (result) => {
       const logs = result.errorLogs || [];
@@ -157,7 +157,7 @@ async function handleResponseCaptured(data, tab) {
       chrome.notifications?.create({
         type: 'basic',
         iconUrl: '/public/icons/icon128.png',
-        title: 'Tribunal — Discussion Complete',
+        title: 'MindM3rge — Discussion Complete',
         message: `${session.turns.length} turns across ${session.currentPass} passes. View results in the extension.`,
       });
     }
@@ -265,11 +265,11 @@ function handleSelectorError(report) {
   chrome.notifications?.create({
     type: 'basic',
     iconUrl: '/public/icons/icon128.png',
-    title: `Tribunal — Selector Issue (${report.model})`,
+    title: `MindM3rge — Selector Issue (${report.model})`,
     message: `Broken: ${broken.join(', ')}. Check error logs in extension storage.`,
   });
 
-  console.error('[Tribunal] Selector error report:', JSON.stringify(report, null, 2));
+  console.error('[MindM3rge] Selector error report:', JSON.stringify(report, null, 2));
 }
 
 async function checkModelConnection(model) {

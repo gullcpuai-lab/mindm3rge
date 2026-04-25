@@ -59,7 +59,7 @@ function findAll(type) {
 }
 
 function reportBroken(elementType, details) {
-  console.warn(`[Tribunal] Claude selector broken: ${elementType}`, details);
+  console.warn(`[MindM3rge] Claude selector broken: ${elementType}`, details);
   try {
     chrome.runtime.sendMessage({
       type: 'SELECTOR_ERROR',
@@ -83,7 +83,7 @@ setTimeout(() => {
       reportBroken(type, { status: 'not found on page load' });
     }
   }
-  console.log('[Tribunal] Claude health check:', report);
+  console.log('[MindM3rge] Claude health check:', report);
   try {
     chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'claude', report });
   } catch {}
@@ -130,10 +130,10 @@ async function uploadFilesThenPrompt(files, prompt) {
     }
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[Tribunal] Uploaded', files.length, 'files to Claude');
+    console.log('[MindM3rge] Uploaded', files.length, 'files to Claude');
     await new Promise(r => setTimeout(r, 2000));
   } else {
-    console.log('[Tribunal] No file input found on Claude');
+    console.log('[MindM3rge] No file input found on Claude');
     reportBroken('fileInput', { context: 'upload attempt' });
   }
 
@@ -145,14 +145,14 @@ function injectPrompt(prompt) {
   const input = result.el;
 
   if (!input) {
-    console.error('[Tribunal] Could not find Claude input field');
+    console.error('[MindM3rge] Could not find Claude input field');
     reportBroken('input', { context: 'inject prompt', method: result.method });
     setTimeout(() => injectPrompt(prompt), 2000);
     return;
   }
 
   if (result.method === 'discovery') {
-    console.log('[Tribunal] Claude input found via auto-discovery');
+    console.log('[MindM3rge] Claude input found via auto-discovery');
   }
 
   input.focus();

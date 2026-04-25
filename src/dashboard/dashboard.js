@@ -1,4 +1,4 @@
-// Dashboard script — full-page UI for Tribunal
+// Dashboard script — full-page UI for MindM3rge
 
 const MODEL_COLORS = { claude: '#f59e0b', chatgpt: '#10b981', gemini: '#3b82f6' };
 const MODEL_NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
@@ -331,7 +331,7 @@ document.getElementById('export-btn')?.addEventListener('click', async () => {
   if (!status?.session) return;
 
   const s = status.session;
-  let md = `# Tribunal Discussion\n\n**Prompt:** ${s.originalPrompt || s.prompt}\n\n`;
+  let md = `# MindM3rge Discussion\n\n**Prompt:** ${s.originalPrompt || s.prompt}\n\n`;
   md += `**Models:** ${s.modelOrder.map(m => MODEL_NAMES[m]).join(', ')}\n`;
   md += `**Passes:** ${s.pass-btnes}\n\n---\n\n`;
 

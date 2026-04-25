@@ -60,7 +60,7 @@ function findAll(type) {
 }
 
 function reportBroken(elementType, details) {
-  console.warn(`[Tribunal] ChatGPT selector broken: ${elementType}`, details);
+  console.warn(`[MindM3rge] ChatGPT selector broken: ${elementType}`, details);
   try {
     chrome.runtime.sendMessage({
       type: 'SELECTOR_ERROR',
@@ -84,7 +84,7 @@ setTimeout(() => {
       reportBroken(type, { status: 'not found on page load' });
     }
   }
-  console.log('[Tribunal] ChatGPT health check:', report);
+  console.log('[MindM3rge] ChatGPT health check:', report);
   try {
     chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'chatgpt', report });
   } catch {}
@@ -137,10 +137,10 @@ async function uploadFilesThenPrompt(files, prompt) {
     }
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[Tribunal] Uploaded', files.length, 'files to ChatGPT via', fileInput.id || 'input[type="file"]');
+    console.log('[MindM3rge] Uploaded', files.length, 'files to ChatGPT via', fileInput.id || 'input[type="file"]');
     await new Promise(r => setTimeout(r, 3000));
   } else {
-    console.log('[Tribunal] No file input found on ChatGPT');
+    console.log('[MindM3rge] No file input found on ChatGPT');
     reportBroken('fileInput', { context: 'upload attempt' });
   }
 
@@ -152,14 +152,14 @@ function injectPrompt(prompt) {
   const input = result.el;
 
   if (!input) {
-    console.error('[Tribunal] Could not find ChatGPT input field');
+    console.error('[MindM3rge] Could not find ChatGPT input field');
     reportBroken('input', { context: 'inject prompt', method: result.method });
     setTimeout(() => injectPrompt(prompt), 2000);
     return;
   }
 
   if (result.method === 'discovery') {
-    console.log('[Tribunal] ChatGPT input found via auto-discovery');
+    console.log('[MindM3rge] ChatGPT input found via auto-discovery');
   }
 
   input.focus();
