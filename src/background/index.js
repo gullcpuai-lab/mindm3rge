@@ -43,6 +43,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'CHECK_CONNECTION') {
+    checkModelConnection(message.model).then(sendResponse);
+    return true;
+  }
+
   if (message.type === 'TOGGLE_TABS') {
     handleToggleTabs(message.visible);
     sendResponse({ ok: true });
@@ -217,6 +222,30 @@ function getNextAction(session) {
   }
 
   return { done: true };
+}
+
+async function checkModelConnection(model) {
+  const domains = {
+    claude: 'claude.ai',
+    chatgpt: 'chatgpt.com',
+    gemini: 'gemini.google.com',
+  };
+  const domain = domains[model];
+  if (!domain) return { connected: false };
+
+  // Check if there's an existing tab for this model
+  const tabs = await chrome.tabs.query({ url: `https://${domain}/*` });
+  if (tabs.length > 0) {
+    // Tab exists — try to check if logged in via content script
+    try {
+      const response = await chrome.tabs.sendMessage(tabs[0].id, { type: 'CHECK_LOGIN' });
+      return { connected: response?.loggedIn ?? true }; // assume connected if tab exists
+    } catch {
+      return { connected: true }; // tab exists but content script not loaded yet — likely fine
+    }
+  }
+
+  return { connected: false };
 }
 
 function handleToggleTabs(visible) {

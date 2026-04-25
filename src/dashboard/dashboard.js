@@ -330,11 +330,11 @@ document.getElementById('export-btn')?.addEventListener('click', async () => {
 
   const s = status.session;
   let md = `# Tribunal Discussion\n\n**Prompt:** ${s.originalPrompt || s.prompt}\n\n`;
-  md += `**Models:** ${s.model-cardOrder.map(m => MODEL_NAMES[m]).join(', ')}\n`;
+  md += `**Models:** ${s.modelOrder.map(m => MODEL_NAMES[m]).join(', ')}\n`;
   md += `**Passes:** ${s.pass-btnes}\n\n---\n\n`;
 
   for (const t of s.turns) {
-    md += `## ${t.model-cardName} — ${t.role} (Round ${t.round})\n\n${t.content}\n\n---\n\n`;
+    md += `## ${t.modelName} — ${t.role} (Round ${t.round})\n\n${t.content}\n\n---\n\n`;
   }
 
   const blob = new Blob([md], { type: 'text/markdown' });
@@ -363,11 +363,11 @@ function stopPolling() {
 
 function updateUI(session) {
   // Progress
-  const totalTurns = session.pass-btnes * 3; // rough estimate
+  const totalTurns = session.passes * 3; // rough estimate
   const progress = Math.min(100, (session.turns.length / totalTurns) * 100);
   document.getElementById('progress-fill').style.width = progress + '%';
   document.getElementById('pass-current').textContent = session.currentPass;
-  document.getElementById('pass-total').textContent = session.pass-btnes;
+  document.getElementById('pass-total').textContent = session.passes;
   document.getElementById('turn-count').textContent = session.turns.length;
 
   // Add new turns
@@ -425,11 +425,11 @@ function updateTimeline(session) {
 
   // Build expected steps based on session config
   const steps = [];
-  const models = session.model-cardOrder || ['claude', 'chatgpt', 'gemini'];
+  const models = session.modelOrder || ['claude', 'chatgpt', 'gemini'];
   const starter = models[0];
   const others = models.slice(1);
 
-  for (let pass = 1; pass <= session.pass-btnes; pass++) {
+  for (let pass = 1; pass <= session.passes; pass++) {
     if (pass === 1) {
       steps.push({ model: starter, role: 'initial', round: 1, label: MODEL_NAMES[starter], sub: 'Initial Response' });
     } else {
@@ -439,7 +439,7 @@ function updateTimeline(session) {
       steps.push({ model: m, role: 'critique', round: pass, label: MODEL_NAMES[m], sub: `Critique (R${pass})` });
     }
   }
-  steps.push({ model: others[0] || starter, role: 'synthesis', round: session.pass-btnes, label: 'Synthesis', sub: 'Final Answer' });
+  steps.push({ model: others[0] || starter, role: 'synthesis', round: session.passes, label: 'Synthesis', sub: 'Final Answer' });
 
   // Determine which steps are done, active, pending
   const doneTurns = session.turns.length;
@@ -457,7 +457,7 @@ function updateTimeline(session) {
     return `
       <div class="tl-item ${state}">
         <div class="tl-track">
-          <div class="tl-dot ${step.model-card} ${state}"></div>
+          <div class="tl-dot ${step.model} ${state}"></div>
           ${!isLast ? `<div class="tl-line ${isDone ? 'done' : ''}"></div>` : ''}
         </div>
         <div class="tl-content">
@@ -471,7 +471,7 @@ function updateTimeline(session) {
 
 function createTurnCard(turn) {
   const card = document.createElement('div');
-  card.className = `turn ${turn.model-card}`;
+  card.className = `turn ${turn.model}`;
 
   const roleLabels = {
     initial: 'Initial Response',
@@ -484,8 +484,8 @@ function createTurnCard(turn) {
 
   card.innerHTML = `
     <div class="turn-header">
-      <span class="dot dot-${turn.model-card}" style="width:10px;height:10px;border-radius:50%;background:${MODEL_COLORS[turn.model-card]}"></span>
-      <span class="turn-model">${turn.model-cardName}</span>
+      <span class="dot dot-${turn.model}" style="width:10px;height:10px;border-radius:50%;background:${MODEL_COLORS[turn.model]}"></span>
+      <span class="turn-model">${turn.modelName}</span>
       <span class="turn-role">${roleLabels[turn.role] || turn.role}</span>
       <span class="turn-time">Round ${turn.round} · ${time}</span>
     </div>
@@ -520,4 +520,46 @@ chrome.runtime.onMessage.addListener((message) => {
       if (status.session.status === 'running') startPolling();
     }
   } catch (e) {}
+
+  // Check connection status for each model
+  checkConnections();
 })();
+
+async function checkConnections() {
+  const models = [
+    { id: 'claude', url: 'https://claude.ai', loginIndicator: '/login' },
+    { id: 'chatgpt', url: 'https://chatgpt.com', loginIndicator: 'Log in' },
+    { id: 'gemini', url: 'https://gemini.google.com/app', loginIndicator: 'Sign in' },
+  ];
+
+  for (const m of models) {
+    const el = document.getElementById(`conn-${m.id}`);
+    if (!el) continue;
+    const dot = el.querySelector('.conn-dot');
+    const status = el.querySelector('.conn-status');
+    const btn = el.querySelector('.conn-btn');
+
+    try {
+      // Ask background to check if this model's tab exists and is logged in
+      const result = await chrome.runtime.sendMessage({ type: 'CHECK_CONNECTION', model: m.id });
+
+      if (result?.connected) {
+        dot.style.background = '#00d4aa';
+        status.textContent = 'Connected';
+        status.style.color = '#00d4aa';
+        btn.classList.add('hidden');
+      } else {
+        dot.style.background = '#ff5858';
+        status.textContent = 'Not logged in';
+        status.style.color = '#ff5858';
+        btn.classList.remove('hidden');
+      }
+    } catch {
+      // Extension APIs not available (testing outside extension)
+      dot.style.background = 'var(--text3)';
+      status.textContent = 'Unknown';
+      status.style.color = 'var(--text3)';
+      btn.classList.remove('hidden');
+    }
+  }
+}

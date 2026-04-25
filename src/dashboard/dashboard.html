@@ -314,6 +314,22 @@
     .sep { height: 1px; background: var(--border); margin: 16px 0; }
     .hidden { display: none; }
 
+    /* Connection status */
+    .conn-item {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px;
+      padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+    }
+    .conn-dot { width: 10px; height: 10px; border-radius: 50%; transition: background 0.3s; }
+    .conn-name { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .conn-status { font-size: 10px; }
+    .conn-btn {
+      padding: 4px 12px; border-radius: 8px; font-size: 10px; font-weight: 600;
+      border: 1px solid var(--accent); background: transparent; color: var(--accent);
+      cursor: pointer; font-family: inherit; transition: all 0.15s;
+    }
+    .conn-btn:hover { background: rgba(124,92,252,0.1); }
+
     @media (max-width: 900px) {
       .sidebar { display: none; }
       .disc-layout { flex-direction: column-reverse; }
@@ -375,6 +391,31 @@
           </div>
         </div>
 
+        <!-- Connection Status -->
+        <div class="card" id="connection-card">
+          <div class="card-title">Connection Status <span class="info" data-tip="You need to be logged into each model's website in this browser. Click 'Connect' to open the login page for any disconnected model.">i</span></div>
+          <div style="display: flex; gap: 10px;">
+            <div class="conn-item" id="conn-claude">
+              <div class="conn-dot" style="background: var(--text3);"></div>
+              <span class="conn-name">Claude</span>
+              <span class="conn-status" style="color: var(--text3);">Checking...</span>
+              <button class="conn-btn hidden" onclick="window.open('https://claude.ai/login','_blank')">Connect</button>
+            </div>
+            <div class="conn-item" id="conn-chatgpt">
+              <div class="conn-dot" style="background: var(--text3);"></div>
+              <span class="conn-name">ChatGPT</span>
+              <span class="conn-status" style="color: var(--text3);">Checking...</span>
+              <button class="conn-btn hidden" onclick="window.open('https://chatgpt.com','_blank')">Connect</button>
+            </div>
+            <div class="conn-item" id="conn-gemini">
+              <div class="conn-dot" style="background: var(--text3);"></div>
+              <span class="conn-name">Gemini</span>
+              <span class="conn-status" style="color: var(--text3);">Checking...</span>
+              <button class="conn-btn hidden" onclick="window.open('https://gemini.google.com','_blank')">Connect</button>
+            </div>
+          </div>
+        </div>
+
         <!-- Models -->
         <div class="card">
           <div class="card-title">Participating Models <span class="info" data-tip="Select which AI models join the discussion. All checked models will critique each other's responses.">i</span></div>
@@ -382,7 +423,7 @@
             <label class="model-card on" data-model="claude">
               <input type="checkbox" class="model-toggle" data-model="claude" checked>
               <div class="mc-check">&#10003;</div>
-              <div class="mc-icon"><svg width="32" height="32" viewBox="0 0 46 32"><path d="M28.804 2.248L17.258 21.716l-4.907-8.506h-5.94l10.848 18.79L34.744 2.248h-5.94zM22.742 2.248L5.258 32h5.94l11.544-20.002 5.753 9.973h5.94L22.742 2.248z" fill="#D97706"/></svg></div>
+              <div class="mc-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="#D97706"><path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"/></svg></div>
               <div class="mc-name">Claude</div>
             </label>
             <label class="model-card on" data-model="chatgpt">
