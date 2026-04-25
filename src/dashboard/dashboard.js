@@ -5,7 +5,7 @@ const MODEL_NAMES = { claude: 'Claude', chatgpt: 'ChatGPT', gemini: 'Gemini' };
 
 let selectedModel = 'claude';
 let selectedPasses = 1;
-let fileContent = null;
+let uploadedFiles = []; // { name, size, content }
 let tabsVisible = false;
 
 // Model selection
@@ -26,13 +26,58 @@ document.querySelectorAll('.pass-chip').forEach(btn => {
   });
 });
 
-// File upload
+// File upload — multi-file support (up to 10)
 document.getElementById('file-input').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  document.getElementById('file-name').textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
-  fileContent = await file.text();
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+
+  for (const file of files) {
+    if (uploadedFiles.length >= 10) break;
+    if (uploadedFiles.some(f => f.name === file.name)) continue; // skip duplicates
+
+    let content;
+    if (file.name.endsWith('.pdf')) {
+      content = `[PDF: ${file.name} — ${(file.size / 1024).toFixed(0)} KB — PDF text extraction not available in extension. Content will be summarized by the model if possible.]`;
+    } else {
+      content = await file.text();
+    }
+
+    uploadedFiles.push({ name: file.name, size: file.size, content });
+  }
+
+  renderFileList();
+  e.target.value = ''; // reset so same file can be re-added if removed
 });
+
+function renderFileList() {
+  const list = document.getElementById('file-list');
+  list.innerHTML = uploadedFiles.map((f, i) => `
+    <div class="file-item">
+      <span class="name">${f.name}</span>
+      <span class="size">${(f.size / 1024).toFixed(1)} KB</span>
+      <button class="remove" data-idx="${i}" title="Remove">&times;</button>
+    </div>
+  `).join('');
+
+  // Remove buttons
+  list.querySelectorAll('.remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      uploadedFiles.splice(parseInt(btn.dataset.idx), 1);
+      renderFileList();
+    });
+  });
+
+  document.getElementById('file-count').textContent = uploadedFiles.length > 0
+    ? `${uploadedFiles.length}/10 documents attached`
+    : '';
+}
+
+function buildFileContext() {
+  if (uploadedFiles.length === 0) return null;
+  return uploadedFiles.map((f, i) =>
+    `--- DOCUMENT ${i + 1}: ${f.name} ---\n${f.content}\n--- END ${f.name} ---`
+  ).join('\n\n');
+}
 
 // Toggle LLM tabs visibility
 document.getElementById('toggle-tabs-btn').addEventListener('click', async () => {
@@ -65,8 +110,8 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         prompt,
         starterModel: selectedModel,
         passes: selectedPasses,
-        fileContent,
-        hideTabs: true, // Request hidden tabs
+        fileContent: buildFileContext(),
+        hideTabs: true,
       },
     });
 
@@ -94,8 +139,8 @@ document.getElementById('new-btn')?.addEventListener('click', () => {
   document.getElementById('start-btn').textContent = 'Start Discussion';
   document.getElementById('prompt-input').value = '';
   document.getElementById('prompt-input').style.borderColor = '';
-  fileContent = null;
-  document.getElementById('file-name').textContent = '';
+  uploadedFiles = [];
+  renderFileList();
   stopPolling();
 });
 

@@ -66,7 +66,7 @@ async function handleStartSession(data) {
   const { prompt, starterModel, passes, fileContent } = data;
 
   const fullPrompt = fileContent
-    ? `${prompt}\n\n--- ATTACHED DOCUMENT ---\n${fileContent}\n--- END DOCUMENT ---`
+    ? `${prompt}\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`
     : prompt;
 
   // Determine model order

@@ -93,17 +93,12 @@
     textarea:focus { border-color: #7c3aed; outline: none; }
     textarea::placeholder { color: #52525b; }
 
-    .file-row {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 16px;
-    }
+    .file-section { margin-bottom: 16px; }
     .file-label {
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 14px;
+      padding: 10px 14px;
       border: 1px dashed #27272a;
       border-radius: 8px;
       cursor: pointer;
@@ -113,7 +108,25 @@
     }
     .file-label:hover { border-color: #3f3f46; color: #a1a1aa; }
     .file-label input { display: none; }
-    .file-name { font-size: 11px; color: #71717a; }
+    .file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 10px;
+      background: #1c1c1f;
+      border: 1px solid #27272a;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #a1a1aa;
+    }
+    .file-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-item .size { color: #52525b; margin: 0 8px; white-space: nowrap; }
+    .file-item .remove {
+      background: none; border: none; color: #52525b; cursor: pointer; font-size: 14px; padding: 0 4px;
+    }
+    .file-item .remove:hover { color: #ef4444; }
+    .file-count { font-size: 10px; color: #52525b; margin-top: 4px; }
 
     .btn-start {
       width: 100%;
@@ -332,13 +345,14 @@
         <h2>Your Prompt</h2>
         <textarea id="prompt-input" placeholder="Enter your prompt here. The models will discuss, critique, and refine the answer through structured back-and-forth."></textarea>
 
-        <div class="file-row">
+        <div class="file-section">
           <label class="file-label">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-            Attach document
-            <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv">
+            Attach documents (up to 10)
+            <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv,.json,.xml,.html" multiple>
           </label>
-          <span class="file-name" id="file-name"></span>
+          <div class="file-list" id="file-list"></div>
+          <div class="file-count" id="file-count"></div>
         </div>
 
         <button class="btn-start" id="start-btn">Start Discussion</button>
