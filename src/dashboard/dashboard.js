@@ -767,6 +767,124 @@ document.querySelectorAll('.template-btn').forEach(btn => {
   });
 });
 
+// ═══ Save custom template ═══
+document.getElementById('save-template-btn')?.addEventListener('click', () => {
+  const name = prompt('Template name:');
+  if (!name || !name.trim()) return;
+
+  // Capture current state
+  const template = {
+    name: name.trim(),
+    prompt: document.getElementById('prompt-input')?.value || '',
+    goal: document.getElementById('goal-input')?.value || '',
+    directives: [...document.querySelectorAll('.chip.on')].map(c => c.dataset.directive),
+    roles: {},
+    passes: selectedPasses,
+    customDirectives: customDirectives.map(d => d.text).filter(Boolean),
+  };
+  document.querySelectorAll('.role-select').forEach(s => {
+    if (s.value) template.roles[s.dataset.model] = s.value;
+  });
+
+  // Save to storage
+  try {
+    chrome.storage?.local?.get('customTemplates', (result) => {
+      const templates = result?.customTemplates || [];
+      templates.push(template);
+      chrome.storage.local.set({ customTemplates: templates });
+      renderCustomTemplates(templates);
+    });
+  } catch {
+    // Fallback to localStorage
+    const templates = JSON.parse(localStorage.getItem('customTemplates') || '[]');
+    templates.push(template);
+    localStorage.setItem('customTemplates', JSON.stringify(templates));
+    renderCustomTemplates(templates);
+  }
+});
+
+function renderCustomTemplates(templates) {
+  const container = document.getElementById('custom-templates');
+  if (!container) return;
+  container.innerHTML = templates.map((t, i) => `
+    <div style="display:flex;gap:4px;align-items:center;">
+      <button class="template-btn custom-tpl" data-idx="${i}">&#11088; ${t.name}</button>
+      <button class="turn-act" data-del-tpl="${i}" title="Delete" style="font-size:12px;color:var(--text3);">&times;</button>
+    </div>
+  `).join('');
+
+  // Load handlers
+  container.querySelectorAll('.custom-tpl').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = templates[parseInt(btn.dataset.idx)];
+      if (!t) return;
+      if (t.prompt) document.getElementById('prompt-input').value = t.prompt;
+      if (t.goal) document.getElementById('goal-input').value = t.goal;
+      if (t.directives) {
+        document.querySelectorAll('.chip').forEach(c => c.classList.toggle('on', t.directives.includes(c.dataset.directive)));
+      }
+      if (t.roles) {
+        for (const [model, role] of Object.entries(t.roles)) {
+          const sel = document.querySelector(`.role-select[data-model="${model}"]`);
+          if (sel) sel.value = role;
+        }
+      }
+      if (t.passes) {
+        document.querySelectorAll('.pass-btn').forEach(b => b.classList.remove('on'));
+        const pb = document.querySelector(`.pass-btn[data-passes="${t.passes}"]`);
+        if (pb) pb.classList.add('on');
+        selectedPasses = t.passes;
+      }
+      if (t.customDirectives?.length) {
+        customDirectives = t.customDirectives.map((text, i) => ({ id: 'ct_' + i, text }));
+        renderCustomDirectives();
+      }
+    });
+  });
+
+  // Delete handlers
+  container.querySelectorAll('[data-del-tpl]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      templates.splice(parseInt(btn.dataset.delTpl), 1);
+      try { chrome.storage?.local?.set({ customTemplates: templates }); } catch { localStorage.setItem('customTemplates', JSON.stringify(templates)); }
+      renderCustomTemplates(templates);
+    });
+  });
+}
+
+// Load custom templates on startup
+try {
+  chrome.storage?.local?.get('customTemplates', (result) => {
+    if (result?.customTemplates?.length) renderCustomTemplates(result.customTemplates);
+  });
+} catch {
+  const saved = JSON.parse(localStorage.getItem('customTemplates') || '[]');
+  if (saved.length) renderCustomTemplates(saved);
+}
+
+// ═══ Custom role input ═══
+document.querySelectorAll('.role-select').forEach(sel => {
+  sel.addEventListener('change', (e) => {
+    if (e.target.value === 'custom') {
+      const custom = prompt('Enter custom role instruction:');
+      if (custom && custom.trim()) {
+        // Add as a new option
+        const opt = document.createElement('option');
+        opt.value = 'custom_' + Date.now();
+        opt.textContent = custom.trim().substring(0, 30);
+        opt.dataset.instruction = custom.trim();
+        e.target.insertBefore(opt, e.target.querySelector('[value="custom"]'));
+        e.target.value = opt.value;
+
+        // Store the instruction
+        ROLE_INSTRUCTIONS[opt.value] = custom.trim();
+      } else {
+        e.target.value = '';
+      }
+    }
+  });
+});
+
 // ═══ Model roles (7) ═══
 function getModelRoles() {
   const roles = {};
