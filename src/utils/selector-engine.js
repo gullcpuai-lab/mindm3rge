@@ -10,20 +10,20 @@ const SELECTOR_CONFIGS = {
       '[data-placeholder*="How can"]',
     ],
     sendButton: [
-      'button[aria-label="Send Message"]',
+      'button[aria-label="Send message"]',
       'button[type="submit"]',
       'fieldset button:has(svg)',
       'button[aria-label="Send"]',
     ],
     response: [
-      '.font-claude-message',
+      '.standard-markdown',
       '[data-testid="chat-message-content"]',
       '.prose',
       '[class*="response"]',
       '[class*="message-content"]',
     ],
     stopButton: [
-      'button[aria-label="Stop Response"]',
+      'button[aria-label*="Stop"]',
       'button:has(svg.animate-spin)',
     ],
     fileInput: [

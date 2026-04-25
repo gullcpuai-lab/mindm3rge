@@ -12,15 +12,15 @@ const SELECTORS = {
     'fieldset div[contenteditable="true"]', '[data-placeholder*="How can"]',
   ],
   sendButton: [
-    'button[aria-label="Send Message"]', 'button[type="submit"]',
+    'button[aria-label="Send message"]', 'button[type="submit"]',
     'fieldset button:has(svg)', 'button[aria-label="Send"]',
   ],
   response: [
-    '.font-claude-message', '[data-testid="chat-message-content"]',
+    '.standard-markdown', '[class*="response"]',
     '.prose', '[class*="message-content"]',
   ],
   stopButton: [
-    'button[aria-label="Stop Response"]', 'button:has(svg.animate-spin)',
+    'button[aria-label*="Stop"]', 'button:has(svg.animate-spin)',
   ],
   fileInput: ['input[type="file"]'],
   uploadButton: ['button[aria-label="Add content"]', 'button[aria-label="Attach files"]'],

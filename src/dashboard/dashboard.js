@@ -691,6 +691,82 @@ document.getElementById('share-close')?.addEventListener('click', () => {
 });
 
 // ═══ Session history (1) ═══
+// ═══ Templates (8) ═══
+const TEMPLATES = {
+  legal: {
+    prompt: 'Paste your legal document, complaint, or filing here.',
+    goal: 'Review this document for legal sufficiency. Identify every factual gap, procedural weakness, and vulnerability to demurrer or anti-SLAPP motion. Propose specific language fixes.',
+    directives: ['strengths-weaknesses', 'factual-accuracy', 'logical-gaps', 'legal-sufficiency', 'risk-analysis', 'evidence-alignment', 'completeness', 'counterarguments'],
+    roles: { claude: 'legal', chatgpt: 'advocate', gemini: 'factcheck' },
+    passes: 5,
+  },
+  code: {
+    prompt: 'Paste your code here for review.',
+    goal: 'Review this code for bugs, security vulnerabilities, performance issues, and architectural problems. Propose specific fixes for each issue found.',
+    directives: ['strengths-weaknesses', 'logical-gaps', 'completeness', 'code-review', 'security-analysis', 'alternative-approaches'],
+    roles: { claude: 'technical', chatgpt: 'advocate', gemini: 'factcheck' },
+    passes: 3,
+  },
+  research: {
+    prompt: 'Paste your research findings, hypothesis, or analysis here.',
+    goal: 'Validate this research. Challenge the methodology, identify confounding variables, check statistical claims, and suggest improvements.',
+    directives: ['strengths-weaknesses', 'factual-accuracy', 'logical-gaps', 'bias-detection', 'completeness', 'alternative-approaches', 'counterarguments'],
+    roles: { claude: '', chatgpt: 'advocate', gemini: 'factcheck' },
+    passes: 3,
+  },
+  strategy: {
+    prompt: 'Describe your business strategy, go-to-market plan, or strategic decision here.',
+    goal: 'Stress-test this strategy. Identify blind spots, challenge assumptions, evaluate feasibility, and propose alternatives.',
+    directives: ['strengths-weaknesses', 'risk-analysis', 'alternative-approaches', 'completeness', 'counterarguments', 'bias-detection'],
+    roles: { claude: '', chatgpt: 'advocate', gemini: '' },
+    passes: 3,
+  },
+  writing: {
+    prompt: 'Paste your writing, article, or document here.',
+    goal: 'Improve this writing. Evaluate structure, clarity, argument strength, narrative flow, and factual accuracy. Propose specific edits.',
+    directives: ['strengths-weaknesses', 'factual-accuracy', 'clarity-readability', 'completeness', 'counterarguments'],
+    roles: { claude: 'creative', chatgpt: '', gemini: 'factcheck' },
+    passes: 3,
+  },
+};
+
+document.querySelectorAll('.template-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const t = TEMPLATES[btn.dataset.template];
+    if (!t) return;
+
+    // Fill prompt and goal
+    document.getElementById('prompt-input').value = t.prompt;
+    document.getElementById('goal-input').value = t.goal;
+
+    // Set passes
+    document.querySelectorAll('.pass-btn').forEach(b => b.classList.remove('on'));
+    const passBtn = document.querySelector(`.pass-btn[data-passes="${t.passes}"]`);
+    if (passBtn) passBtn.classList.add('on');
+    selectedPasses = t.passes;
+
+    // Set directives
+    document.querySelectorAll('.chip').forEach(c => {
+      c.classList.toggle('on', t.directives.includes(c.dataset.directive));
+    });
+
+    // Set roles
+    for (const [model, role] of Object.entries(t.roles)) {
+      const sel = document.querySelector(`.role-select[data-model="${model}"]`);
+      if (sel) sel.value = role;
+    }
+
+    // Update stats
+    document.getElementById('stat-rounds').textContent = t.passes;
+    document.getElementById('stat-focus').textContent = t.directives.length;
+
+    // Visual feedback
+    btn.style.borderColor = 'var(--accent)';
+    btn.style.color = 'var(--text)';
+    setTimeout(() => { btn.style.borderColor = ''; btn.style.color = ''; }, 1500);
+  });
+});
+
 // ═══ Model roles (7) ═══
 function getModelRoles() {
   const roles = {};

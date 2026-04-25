@@ -522,6 +522,16 @@
       border: 0.5px solid var(--border); background: rgba(0,0,0,0.3);
       color: var(--text); font-family: inherit;
     }
+    /* Templates */
+    .template-btn {
+      padding: 10px 16px; border-radius: 12px; font-size: 12px; font-weight: 500;
+      border: 0.5px solid var(--border); background: var(--card);
+      color: var(--text2); cursor: pointer; font-family: inherit;
+      transition: all 0.2s; display: flex; align-items: center; gap: 6px;
+    }
+    .template-btn:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); box-shadow: var(--shadow); }
+    .template-btn:active { transform: translateY(0); }
+
     .referral-link button {
       padding: 8px 14px; border-radius: 8px; font-size: 11px; font-weight: 600;
       background: var(--accent); color: #fff; border: none; cursor: pointer;
@@ -712,6 +722,18 @@
           </label>
           <div class="file-list" id="file-list"></div>
           <div class="f-count" id="file-count"></div>
+        </div>
+
+        <!-- Templates -->
+        <div class="card">
+          <div class="card-title">Quick Templates <span class="info" data-tip="One-click presets that auto-fill the prompt, goal, directives, and model roles. Click to load, then customize as needed.">i</span></div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="template-btn" data-template="legal">&#9878; Legal Review</button>
+            <button class="template-btn" data-template="code">&#128187; Code Audit</button>
+            <button class="template-btn" data-template="research">&#128300; Research Validation</button>
+            <button class="template-btn" data-template="strategy">&#128200; Business Strategy</button>
+            <button class="template-btn" data-template="writing">&#9999; Writing Review</button>
+          </div>
         </div>
 
         <button class="cta" id="start-btn">Start Discussion</button>
