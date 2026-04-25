@@ -41,7 +41,21 @@ document.querySelectorAll('.pass-chip').forEach(btn => {
     document.querySelectorAll('.pass-chip').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     selectedPasses = parseInt(btn.dataset.passes);
+    document.getElementById('custom-passes').value = '';
+    document.getElementById('custom-passes').style.borderColor = '#27272a';
   });
+});
+
+// Custom pass count
+document.getElementById('custom-passes').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value);
+  if (val > 0) {
+    document.querySelectorAll('.pass-chip').forEach(b => b.classList.remove('selected'));
+    selectedPasses = Math.min(val, 50);
+    e.target.style.borderColor = '#7c3aed';
+  } else {
+    e.target.style.borderColor = '#27272a';
+  }
 });
 
 // Directive chip selection
