@@ -1,8 +1,93 @@
-// Content script for claude.ai
-// Handles injecting prompts and capturing responses
+// Content script for claude.ai — self-healing with selector engine
 
 let isWaitingForResponse = false;
 let lastResponseText = '';
+
+// Import selector engine (injected as global since content scripts can't use ES modules)
+// The functions are defined inline here for content script compatibility
+
+const SELECTORS = {
+  input: [
+    'div[contenteditable="true"]', 'div.ProseMirror',
+    'fieldset div[contenteditable="true"]', '[data-placeholder*="How can"]',
+  ],
+  sendButton: [
+    'button[aria-label="Send Message"]', 'button[type="submit"]',
+    'fieldset button:has(svg)', 'button[aria-label="Send"]',
+  ],
+  response: [
+    '.font-claude-message', '[data-testid="chat-message-content"]',
+    '.prose', '[class*="message-content"]',
+  ],
+  stopButton: [
+    'button[aria-label="Stop Response"]', 'button:has(svg.animate-spin)',
+  ],
+  fileInput: ['input[type="file"]'],
+  uploadButton: ['button[aria-label="Add content"]', 'button[aria-label="Attach files"]'],
+};
+
+function find(type) {
+  for (const sel of SELECTORS[type] || []) {
+    const el = document.querySelector(sel);
+    if (el) return { el, method: 'selector', selector: sel };
+  }
+  // Auto-discovery fallback
+  if (type === 'input') {
+    const candidates = [...document.querySelectorAll('[contenteditable="true"], textarea')];
+    const found = candidates.filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > window.innerHeight * 0.5 && r.width > 200;
+    }).sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0];
+    if (found) return { el: found, method: 'discovery' };
+  }
+  if (type === 'sendButton') {
+    const found = [...document.querySelectorAll('button')].filter(b => {
+      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+      return label.includes('send') && !b.disabled;
+    })[0];
+    if (found) return { el: found, method: 'discovery' };
+  }
+  return { el: null, method: 'failed' };
+}
+
+function findAll(type) {
+  for (const sel of SELECTORS[type] || []) {
+    const els = document.querySelectorAll(sel);
+    if (els.length > 0) return [...els];
+  }
+  return [];
+}
+
+function reportBroken(elementType, details) {
+  console.warn(`[Tribunal] Claude selector broken: ${elementType}`, details);
+  try {
+    chrome.runtime.sendMessage({
+      type: 'SELECTOR_ERROR',
+      model: 'claude',
+      elementType,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+      details,
+      triedSelectors: SELECTORS[elementType],
+    });
+  } catch {}
+}
+
+// Run health check on load
+setTimeout(() => {
+  const report = {};
+  for (const type of Object.keys(SELECTORS)) {
+    const result = find(type);
+    report[type] = { found: !!result.el, method: result.method };
+    if (!result.el && type !== 'stopButton' && type !== 'fileInput') {
+      reportBroken(type, { status: 'not found on page load' });
+    }
+  }
+  console.log('[Tribunal] Claude health check:', report);
+  try {
+    chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'claude', report });
+  } catch {}
+}, 3000);
 
 // Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -14,26 +99,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true });
     }
   }
+  if (message.type === 'CHECK_LOGIN') {
+    const isLoggedIn = !window.location.href.includes('/login');
+    sendResponse({ loggedIn: isLoggedIn });
+  }
   return true;
 });
 
-// Upload files via Claude's native attachment UI
 async function uploadFilesThenPrompt(files, prompt) {
-  // Claude uses a file input triggered by the + button or paperclip
-  const attachBtn = document.querySelector('button[aria-label="Attach files"]')
-    || document.querySelector('fieldset button:has(svg)')
-    || document.querySelector('button[data-testid="file-upload"]');
+  let fileInput = find('fileInput').el;
 
-  // Find or create a file input
-  let fileInput = document.querySelector('input[type="file"]');
-  if (!fileInput && attachBtn) {
-    attachBtn.click();
-    await new Promise(r => setTimeout(r, 500));
-    fileInput = document.querySelector('input[type="file"]');
+  if (!fileInput) {
+    const uploadBtn = find('uploadButton').el;
+    if (uploadBtn) {
+      uploadBtn.click();
+      await new Promise(r => setTimeout(r, 500));
+      fileInput = find('fileInput').el;
+    }
   }
 
   if (fileInput) {
-    // Convert base64 files to File objects and set on input
     const dt = new DataTransfer();
     for (const f of files) {
       const binary = atob(f.base64);
@@ -46,107 +131,76 @@ async function uploadFilesThenPrompt(files, prompt) {
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
     console.log('[Tribunal] Uploaded', files.length, 'files to Claude');
-
-    // Wait for files to process
     await new Promise(r => setTimeout(r, 2000));
   } else {
-    console.log('[Tribunal] No file input found on Claude, falling back to text context');
+    console.log('[Tribunal] No file input found on Claude');
+    reportBroken('fileInput', { context: 'upload attempt' });
   }
 
-  // Now type the prompt
   injectPrompt(prompt);
 }
 
 function injectPrompt(prompt) {
-  // Find the input field on claude.ai
-  const inputSelectors = [
-    'div[contenteditable="true"]', // Main chat input
-    'fieldset div[contenteditable="true"]',
-    'div.ProseMirror',
-  ];
-
-  let input = null;
-  for (const selector of inputSelectors) {
-    input = document.querySelector(selector);
-    if (input) break;
-  }
+  const result = find('input');
+  const input = result.el;
 
   if (!input) {
     console.error('[Tribunal] Could not find Claude input field');
-    // Retry after a short delay
-    setTimeout(() => injectPrompt(prompt), 1000);
+    reportBroken('input', { context: 'inject prompt', method: result.method });
+    setTimeout(() => injectPrompt(prompt), 2000);
     return;
   }
 
-  // Set the text content
+  if (result.method === 'discovery') {
+    console.log('[Tribunal] Claude input found via auto-discovery');
+  }
+
   input.focus();
   input.textContent = prompt;
-
-  // Dispatch input event to trigger React state update
   input.dispatchEvent(new Event('input', { bubbles: true }));
 
-  // Small delay then click send
   setTimeout(() => {
-    const sendButton = document.querySelector('button[aria-label="Send Message"]')
-      || document.querySelector('button[type="submit"]')
-      || [...document.querySelectorAll('button')].find(b => b.querySelector('svg') && b.closest('fieldset'));
+    const sendResult = find('sendButton');
+    const sendButton = sendResult.el;
 
     if (sendButton && !sendButton.disabled) {
       sendButton.click();
       isWaitingForResponse = true;
       watchForResponse();
     } else {
-      console.error('[Tribunal] Could not find/click Claude send button');
+      // Fallback: try Enter key
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      isWaitingForResponse = true;
+      watchForResponse();
+      if (!sendButton) reportBroken('sendButton', { context: 'after typing prompt' });
     }
   }, 500);
 }
 
 function watchForResponse() {
-  // Poll for the response to finish generating
   const checkInterval = setInterval(() => {
-    // Check if Claude is still generating
-    const stopButton = document.querySelector('button[aria-label="Stop Response"]')
-      || document.querySelector('button:has(svg.animate-spin)');
+    // Check if still generating
+    const stopBtn = find('stopButton').el;
+    if (stopBtn) return;
 
-    if (stopButton) {
-      // Still generating — wait
-      return;
-    }
+    // Get responses
+    const responses = findAll('response');
 
-    // Get the last response
-    const responses = document.querySelectorAll('[data-is-streaming]');
-    const messageBlocks = document.querySelectorAll('.font-claude-message');
-
-    // Try multiple selectors for Claude's response
-    let responseElements = document.querySelectorAll('.font-claude-message');
-    if (responseElements.length === 0) {
-      responseElements = document.querySelectorAll('[data-testid="chat-message-content"]');
-    }
-    if (responseElements.length === 0) {
-      responseElements = document.querySelectorAll('.prose');
-    }
-
-    if (responseElements.length > 0) {
-      const lastResponse = responseElements[responseElements.length - 1];
+    if (responses.length > 0) {
+      const lastResponse = responses[responses.length - 1];
       const text = lastResponse.innerText || lastResponse.textContent;
 
       if (text && text !== lastResponseText && text.length > 10) {
-        // Wait a bit more to make sure it's done
         setTimeout(() => {
           const finalText = lastResponse.innerText || lastResponse.textContent;
           if (finalText === text) {
-            // Response is complete
             lastResponseText = finalText;
             isWaitingForResponse = false;
             clearInterval(checkInterval);
 
-            // Send to background
             chrome.runtime.sendMessage({
               type: 'RESPONSE_CAPTURED',
-              data: {
-                model: 'claude',
-                response: finalText,
-              },
+              data: { model: 'claude', response: finalText },
             });
           }
         }, 2000);
@@ -159,10 +213,9 @@ function watchForResponse() {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
       isWaitingForResponse = false;
-      console.error('[Tribunal] Claude response timeout');
+      reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
   }, 300000);
 }
 
-// Notify background that content script is ready
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', model: 'claude' });

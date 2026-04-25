@@ -1,8 +1,96 @@
-// Content script for gemini.google.com
+// Content script for gemini.google.com — self-healing with selector engine
 
 let isWaitingForResponse = false;
 let lastResponseText = '';
 
+const SELECTORS = {
+  input: [
+    'div.ql-editor', 'rich-textarea div[contenteditable="true"]',
+    'div[contenteditable="true"][aria-label*="prompt"]',
+  ],
+  sendButton: [
+    'button[aria-label="Send message"]', 'button.send-button',
+  ],
+  response: [
+    'model-response .markdown', '.response-container .markdown',
+    'message-content.model-response-text',
+  ],
+  stopButton: [
+    'button[aria-label="Stop"]',
+  ],
+  uploadButton: [
+    'button[aria-label="Open upload file menu"]', 'button[aria-label*="upload"]',
+  ],
+  uploadFilesButton: [
+    'button[aria-label*="Upload files"]',
+  ],
+  fileInput: ['input[type="file"]'],
+};
+
+function find(type) {
+  for (const sel of SELECTORS[type] || []) {
+    const el = document.querySelector(sel);
+    if (el) return { el, method: 'selector', selector: sel };
+  }
+  // Auto-discovery fallback
+  if (type === 'input') {
+    const candidates = [...document.querySelectorAll('[contenteditable="true"], textarea')];
+    const found = candidates.filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > window.innerHeight * 0.5 && r.width > 200;
+    }).sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0];
+    if (found) return { el: found, method: 'discovery' };
+  }
+  if (type === 'sendButton') {
+    const found = [...document.querySelectorAll('button')].filter(b => {
+      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+      return label.includes('send') && !b.disabled;
+    })[0];
+    if (found) return { el: found, method: 'discovery' };
+  }
+  return { el: null, method: 'failed' };
+}
+
+function findAll(type) {
+  for (const sel of SELECTORS[type] || []) {
+    const els = document.querySelectorAll(sel);
+    if (els.length > 0) return [...els];
+  }
+  return [];
+}
+
+function reportBroken(elementType, details) {
+  console.warn(`[Tribunal] Gemini selector broken: ${elementType}`, details);
+  try {
+    chrome.runtime.sendMessage({
+      type: 'SELECTOR_ERROR',
+      model: 'gemini',
+      elementType,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+      details,
+      triedSelectors: SELECTORS[elementType],
+    });
+  } catch {}
+}
+
+// Run health check on load
+setTimeout(() => {
+  const report = {};
+  for (const type of Object.keys(SELECTORS)) {
+    const result = find(type);
+    report[type] = { found: !!result.el, method: result.method };
+    if (!result.el && type !== 'stopButton' && type !== 'fileInput' && type !== 'uploadFilesButton') {
+      reportBroken(type, { status: 'not found on page load' });
+    }
+  }
+  console.log('[Tribunal] Gemini health check:', report);
+  try {
+    chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'gemini', report });
+  } catch {}
+}, 3000);
+
+// Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'INJECT_PROMPT') {
     if (message.files && message.files.length > 0) {
@@ -12,30 +100,38 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true });
     }
   }
+  if (message.type === 'CHECK_LOGIN') {
+    // Gemini redirects to accounts.google.com if not logged in
+    const isLoggedIn = !window.location.href.includes('accounts.google.com');
+    sendResponse({ loggedIn: isLoggedIn });
+  }
   return true;
 });
 
 async function uploadFilesThenPrompt(files, prompt) {
   let uploaded = false;
-  let fileInput = document.querySelector('input[type="file"]');
+  let fileInput = find('fileInput').el;
 
-  // Step 1: Click the + button to open the upload menu
+  // Step 1: Click the upload menu button (+ button) to open the upload menu
   if (!fileInput) {
-    const openMenuBtn = document.querySelector('button[aria-label*="Open upload file menu"]')
-      || document.querySelector('button[aria-label*="upload"]');
+    const openMenuBtn = find('uploadButton').el;
     if (openMenuBtn) {
       openMenuBtn.click();
       await new Promise(r => setTimeout(r, 1000));
+    } else {
+      reportBroken('uploadButton', { context: 'upload attempt - menu button not found' });
     }
   }
 
   // Step 2: Click "Upload files" in the menu that appeared
   if (!fileInput) {
-    const uploadBtn = document.querySelector('button[aria-label*="Upload files"]');
-    if (uploadBtn) {
-      uploadBtn.click();
+    const uploadFilesBtn = find('uploadFilesButton').el;
+    if (uploadFilesBtn) {
+      uploadFilesBtn.click();
       await new Promise(r => setTimeout(r, 1000));
-      fileInput = document.querySelector('input[type="file"]');
+      fileInput = find('fileInput').el;
+    } else {
+      reportBroken('uploadFilesButton', { context: 'upload attempt - upload files button not found in menu' });
     }
   }
 
@@ -57,8 +153,9 @@ async function uploadFilesThenPrompt(files, prompt) {
   }
 
   if (!uploaded) {
-    // Fallback: paste file contents as text context in the prompt
+    // Fallback: inject file content as text in the prompt
     console.log('[Tribunal] Gemini native upload not available — injecting file content as text');
+    reportBroken('fileInput', { context: 'upload attempt - falling back to text injection' });
     const fileContext = files.map((f, i) => {
       try {
         const binary = atob(f.base64);
@@ -74,23 +171,18 @@ async function uploadFilesThenPrompt(files, prompt) {
 }
 
 function injectPrompt(prompt) {
-  const inputSelectors = [
-    'div.ql-editor',
-    'rich-textarea div[contenteditable="true"]',
-    'div[contenteditable="true"][aria-label*="prompt"]',
-    '.input-area div[contenteditable="true"]',
-  ];
-
-  let input = null;
-  for (const selector of inputSelectors) {
-    input = document.querySelector(selector);
-    if (input) break;
-  }
+  const result = find('input');
+  const input = result.el;
 
   if (!input) {
     console.error('[Tribunal] Could not find Gemini input field');
-    setTimeout(() => injectPrompt(prompt), 1000);
+    reportBroken('input', { context: 'inject prompt', method: result.method });
+    setTimeout(() => injectPrompt(prompt), 2000);
     return;
+  }
+
+  if (result.method === 'discovery') {
+    console.log('[Tribunal] Gemini input found via auto-discovery');
   }
 
   input.focus();
@@ -98,18 +190,19 @@ function injectPrompt(prompt) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 
   setTimeout(() => {
-    const sendButton = document.querySelector('button[aria-label="Send message"]')
-      || document.querySelector('button.send-button')
-      || document.querySelector('mat-icon[data-mat-icon-name="send"]')?.closest('button');
+    const sendResult = find('sendButton');
+    const sendButton = sendResult.el;
 
     if (sendButton && !sendButton.disabled) {
       sendButton.click();
       isWaitingForResponse = true;
       watchForResponse();
     } else {
+      // Fallback: try Enter key
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       isWaitingForResponse = true;
       watchForResponse();
+      if (!sendButton) reportBroken('sendButton', { context: 'after typing prompt' });
     }
   }, 500);
 }
@@ -117,22 +210,14 @@ function injectPrompt(prompt) {
 function watchForResponse() {
   const checkInterval = setInterval(() => {
     // Check if still generating
-    const stopButton = document.querySelector('button[aria-label="Stop"]')
-      || document.querySelector('mat-icon[data-mat-icon-name="stop_circle"]')?.closest('button');
-
-    if (stopButton) return;
+    const stopBtn = find('stopButton').el;
+    if (stopBtn) return;
 
     // Get responses
-    let responseElements = document.querySelectorAll('model-response .markdown');
-    if (responseElements.length === 0) {
-      responseElements = document.querySelectorAll('.response-container .markdown');
-    }
-    if (responseElements.length === 0) {
-      responseElements = document.querySelectorAll('message-content.model-response-text');
-    }
+    const responses = findAll('response');
 
-    if (responseElements.length > 0) {
-      const lastResponse = responseElements[responseElements.length - 1];
+    if (responses.length > 0) {
+      const lastResponse = responses[responses.length - 1];
       const text = lastResponse.innerText || lastResponse.textContent;
 
       if (text && text !== lastResponseText && text.length > 10) {
@@ -145,10 +230,7 @@ function watchForResponse() {
 
             chrome.runtime.sendMessage({
               type: 'RESPONSE_CAPTURED',
-              data: {
-                model: 'gemini',
-                response: finalText,
-              },
+              data: { model: 'gemini', response: finalText },
             });
           }
         }, 2000);
@@ -156,10 +238,12 @@ function watchForResponse() {
     }
   }, 1000);
 
+  // Timeout after 5 minutes
   setTimeout(() => {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
       isWaitingForResponse = false;
+      reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
   }, 300000);
 }

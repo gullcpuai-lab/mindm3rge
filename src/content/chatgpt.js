@@ -1,8 +1,96 @@
-// Content script for chatgpt.com / chat.openai.com
+// Content script for chatgpt.com / chat.openai.com — self-healing with selector engine
 
 let isWaitingForResponse = false;
 let lastResponseText = '';
 
+const SELECTORS = {
+  input: [
+    '#prompt-textarea', 'div[contenteditable="true"][id="prompt-textarea"]',
+    'textarea[data-id="root"]',
+  ],
+  sendButton: [
+    'button[data-testid="send-button"]', 'button[aria-label="Send prompt"]',
+    'form button[type="submit"]',
+  ],
+  response: [
+    '[data-message-author-role="assistant"]', '.agent-turn .markdown',
+    '.message-content',
+  ],
+  stopButton: [
+    'button[aria-label="Stop generating"]', 'button[data-testid="stop-button"]',
+  ],
+  fileInput: [
+    '#upload-files', '#upload-photos', 'input[type="file"]',
+  ],
+  uploadButton: [
+    'button[aria-label="Attach files"]', '#composer-actions-button',
+  ],
+};
+
+function find(type) {
+  for (const sel of SELECTORS[type] || []) {
+    const el = document.querySelector(sel);
+    if (el) return { el, method: 'selector', selector: sel };
+  }
+  // Auto-discovery fallback
+  if (type === 'input') {
+    const candidates = [...document.querySelectorAll('[contenteditable="true"], textarea')];
+    const found = candidates.filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.bottom > window.innerHeight * 0.5 && r.width > 200;
+    }).sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)[0];
+    if (found) return { el: found, method: 'discovery' };
+  }
+  if (type === 'sendButton') {
+    const found = [...document.querySelectorAll('button')].filter(b => {
+      const label = (b.getAttribute('aria-label') || '').toLowerCase();
+      return label.includes('send') && !b.disabled;
+    })[0];
+    if (found) return { el: found, method: 'discovery' };
+  }
+  return { el: null, method: 'failed' };
+}
+
+function findAll(type) {
+  for (const sel of SELECTORS[type] || []) {
+    const els = document.querySelectorAll(sel);
+    if (els.length > 0) return [...els];
+  }
+  return [];
+}
+
+function reportBroken(elementType, details) {
+  console.warn(`[Tribunal] ChatGPT selector broken: ${elementType}`, details);
+  try {
+    chrome.runtime.sendMessage({
+      type: 'SELECTOR_ERROR',
+      model: 'chatgpt',
+      elementType,
+      url: window.location.href,
+      timestamp: new Date().toISOString(),
+      details,
+      triedSelectors: SELECTORS[elementType],
+    });
+  } catch {}
+}
+
+// Run health check on load
+setTimeout(() => {
+  const report = {};
+  for (const type of Object.keys(SELECTORS)) {
+    const result = find(type);
+    report[type] = { found: !!result.el, method: result.method };
+    if (!result.el && type !== 'stopButton' && type !== 'fileInput') {
+      reportBroken(type, { status: 'not found on page load' });
+    }
+  }
+  console.log('[Tribunal] ChatGPT health check:', report);
+  try {
+    chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'chatgpt', report });
+  } catch {}
+}, 3000);
+
+// Listen for messages from background
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'INJECT_PROMPT') {
     if (message.files && message.files.length > 0) {
@@ -12,38 +100,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ ok: true });
     }
   }
+  if (message.type === 'CHECK_LOGIN') {
+    const isLoggedIn = !window.location.href.includes('/auth/login');
+    sendResponse({ loggedIn: isLoggedIn });
+  }
   return true;
 });
 
 async function uploadFilesThenPrompt(files, prompt) {
-  // ChatGPT uses a file input triggered by the + button
-  const attachBtn = document.querySelector('button[aria-label="Attach files"]')
-    || document.querySelector('button[aria-label="Upload file"]')
-    || document.querySelector('#prompt-textarea ~ button');
-
-  let fileInput = document.querySelector('input[type="file"]');
-  if (!fileInput && attachBtn) {
-    attachBtn.click();
-    await new Promise(r => setTimeout(r, 500));
-    fileInput = document.querySelector('input[type="file"]');
-  }
-
-  // ChatGPT has multiple file inputs: upload-files (docs), upload-photos (images)
-  // When logged in, upload-files accepts all types. When not logged in, only images work.
-  // Try the + button first to trigger the upload menu
-  const plusBtn = document.querySelector('button[aria-label="Attach files"]')
-    || document.querySelector('#composer-actions-button');
+  // ChatGPT uses a + button to open an upload menu, then #upload-files for docs
+  const plusBtn = find('uploadButton').el;
   if (plusBtn) {
     plusBtn.click();
     await new Promise(r => setTimeout(r, 500));
   }
 
-  // Prefer upload-files for documents
-  const docInput = document.getElementById('upload-files');
-  const photoInput = document.getElementById('upload-photos');
-  const targetInput = docInput || photoInput || fileInput;
+  // Prefer #upload-files for documents, fall back to #upload-photos or generic file input
+  let fileInput = document.getElementById('upload-files')
+    || document.getElementById('upload-photos')
+    || find('fileInput').el;
 
-  if (targetInput) {
+  if (!fileInput && !plusBtn) {
+    // Try discovery: any file input on the page
+    fileInput = document.querySelector('input[type="file"]');
+  }
+
+  if (fileInput) {
     const dt = new DataTransfer();
     for (const f of files) {
       const binary = atob(f.base64);
@@ -53,35 +135,31 @@ async function uploadFilesThenPrompt(files, prompt) {
       const file = new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' });
       dt.items.add(file);
     }
-    targetInput.files = dt.files;
-    targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[Tribunal] Uploaded', files.length, 'files to ChatGPT via', targetInput.id);
+    fileInput.files = dt.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    console.log('[Tribunal] Uploaded', files.length, 'files to ChatGPT via', fileInput.id || 'input[type="file"]');
     await new Promise(r => setTimeout(r, 3000));
   } else {
-    console.log('[Tribunal] No file input found on ChatGPT — falling back to text context');
+    console.log('[Tribunal] No file input found on ChatGPT');
+    reportBroken('fileInput', { context: 'upload attempt' });
   }
 
   injectPrompt(prompt);
 }
 
 function injectPrompt(prompt) {
-  const inputSelectors = [
-    '#prompt-textarea',
-    'textarea[data-id="root"]',
-    'div[contenteditable="true"][id="prompt-textarea"]',
-    'div#prompt-textarea',
-  ];
-
-  let input = null;
-  for (const selector of inputSelectors) {
-    input = document.querySelector(selector);
-    if (input) break;
-  }
+  const result = find('input');
+  const input = result.el;
 
   if (!input) {
     console.error('[Tribunal] Could not find ChatGPT input field');
-    setTimeout(() => injectPrompt(prompt), 1000);
+    reportBroken('input', { context: 'inject prompt', method: result.method });
+    setTimeout(() => injectPrompt(prompt), 2000);
     return;
+  }
+
+  if (result.method === 'discovery') {
+    console.log('[Tribunal] ChatGPT input found via auto-discovery');
   }
 
   input.focus();
@@ -96,19 +174,19 @@ function injectPrompt(prompt) {
   }
 
   setTimeout(() => {
-    const sendButton = document.querySelector('button[data-testid="send-button"]')
-      || document.querySelector('button[aria-label="Send prompt"]')
-      || document.querySelector('form button[type="submit"]');
+    const sendResult = find('sendButton');
+    const sendButton = sendResult.el;
 
     if (sendButton && !sendButton.disabled) {
       sendButton.click();
       isWaitingForResponse = true;
       watchForResponse();
     } else {
-      // Try pressing Enter
+      // Fallback: try Enter key
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       isWaitingForResponse = true;
       watchForResponse();
+      if (!sendButton) reportBroken('sendButton', { context: 'after typing prompt' });
     }
   }, 500);
 }
@@ -116,22 +194,14 @@ function injectPrompt(prompt) {
 function watchForResponse() {
   const checkInterval = setInterval(() => {
     // Check if still generating
-    const stopButton = document.querySelector('button[aria-label="Stop generating"]')
-      || document.querySelector('button[data-testid="stop-button"]');
-
-    if (stopButton) return;
+    const stopBtn = find('stopButton').el;
+    if (stopBtn) return;
 
     // Get responses
-    let responseElements = document.querySelectorAll('[data-message-author-role="assistant"]');
-    if (responseElements.length === 0) {
-      responseElements = document.querySelectorAll('.agent-turn .markdown');
-    }
-    if (responseElements.length === 0) {
-      responseElements = document.querySelectorAll('.message-content');
-    }
+    const responses = findAll('response');
 
-    if (responseElements.length > 0) {
-      const lastResponse = responseElements[responseElements.length - 1];
+    if (responses.length > 0) {
+      const lastResponse = responses[responses.length - 1];
       const text = lastResponse.innerText || lastResponse.textContent;
 
       if (text && text !== lastResponseText && text.length > 10) {
@@ -144,10 +214,7 @@ function watchForResponse() {
 
             chrome.runtime.sendMessage({
               type: 'RESPONSE_CAPTURED',
-              data: {
-                model: 'chatgpt',
-                response: finalText,
-              },
+              data: { model: 'chatgpt', response: finalText },
             });
           }
         }, 2000);
@@ -155,10 +222,12 @@ function watchForResponse() {
     }
   }, 1000);
 
+  // Timeout after 5 minutes
   setTimeout(() => {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
       isWaitingForResponse = false;
+      reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
   }, 300000);
 }
