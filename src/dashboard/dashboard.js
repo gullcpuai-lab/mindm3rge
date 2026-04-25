@@ -31,10 +31,10 @@ const DIRECTIVE_LABELS = {
 document.querySelectorAll('.model-toggle').forEach(toggle => {
   toggle.addEventListener('change', (e) => {
     const model = e.target.dataset.model;
-    const label = e.target.closest('.model-card');
+    const label = e.target.closest('.model');
     if (e.target.checked) {
       participatingModels.add(model);
-      label.classList.add('selected');
+      label.classList.add('on');
     } else {
       // Must have at least 2 models
       if (participatingModels.size <= 2) {
@@ -42,13 +42,13 @@ document.querySelectorAll('.model-toggle').forEach(toggle => {
         return;
       }
       participatingModels.delete(model);
-      label.classList.remove('selected');
+      label.classList.remove('on');
       // If the removed model was the starter, switch starter
       if (selectedModel === model) {
         const first = [...participatingModels][0];
         selectedModel = first;
         document.querySelectorAll('.starter-chip').forEach(b => {
-          b.classList.toggle('selected', b.dataset.model === first);
+          b.classList.toggle('on', b.dataset.model === first);
         });
       }
     }
@@ -63,17 +63,17 @@ document.querySelectorAll('.model-toggle').forEach(toggle => {
 document.querySelectorAll('.starter-chip').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!participatingModels.has(btn.dataset.model)) return;
-    document.querySelectorAll('.starter-chip').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
+    document.querySelectorAll('.starter-chip').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
     selectedModel = btn.dataset.model;
   });
 });
 
 // Pass selection
-document.querySelectorAll('.pass-chip').forEach(btn => {
+document.querySelectorAll('.pass').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.pass-chip').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
+    document.querySelectorAll('.pass').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
     selectedPasses = parseInt(btn.dataset.passes);
     document.getElementById('custom-passes').value = '';
     document.getElementById('custom-passes').style.borderColor = '#27272a';
@@ -84,7 +84,7 @@ document.querySelectorAll('.pass-chip').forEach(btn => {
 document.getElementById('custom-passes').addEventListener('input', (e) => {
   const val = parseInt(e.target.value);
   if (val > 0) {
-    document.querySelectorAll('.pass-chip').forEach(b => b.classList.remove('selected'));
+    document.querySelectorAll('.pass').forEach(b => b.classList.remove('on'));
     selectedPasses = val;
     e.target.style.borderColor = '#7c3aed';
   } else {
@@ -93,9 +93,9 @@ document.getElementById('custom-passes').addEventListener('input', (e) => {
 });
 
 // Directive chip selection
-document.querySelectorAll('.dir-chip').forEach(chip => {
+document.querySelectorAll('.chip').forEach(chip => {
   chip.addEventListener('click', () => {
-    chip.classList.toggle('selected');
+    chip.classList.toggle('on');
   });
 });
 
@@ -109,9 +109,9 @@ document.getElementById('add-custom-directive').addEventListener('click', () => 
 function renderCustomDirectives() {
   const container = document.getElementById('custom-directives');
   container.innerHTML = customDirectives.map(d => `
-    <div class="custom-directive-row">
+    <div class="cd-row">
       <input type="text" value="${d.text}" placeholder="e.g., Check for HIPAA compliance" data-id="${d.id}"
-        oninput="this.closest('.custom-directive-row').querySelector('input').value">
+        oninput="this.closest('.cd-row').querySelector('input').value">
       <button data-remove="${d.id}" title="Remove">&times;</button>
     </div>
   `).join('');
@@ -135,7 +135,7 @@ function renderCustomDirectives() {
 
 function getSelectedDirectives() {
   const selected = [];
-  document.querySelectorAll('.dir-chip.selected').forEach(chip => {
+  document.querySelectorAll('.chip.on').forEach(chip => {
     const key = chip.dataset.directive;
     selected.push(DIRECTIVE_LABELS[key] || key);
   });
@@ -185,15 +185,15 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
 function renderFileList() {
   const list = document.getElementById('file-list');
   list.innerHTML = uploadedFiles.map((f, i) => `
-    <div class="file-item">
-      <span class="name">${f.name}</span>
-      <span class="size">${(f.size / 1024).toFixed(1)} KB</span>
-      <button class="remove" data-idx="${i}" title="Remove">&times;</button>
+    <div class="f-item">
+      <span class="nm">${f.name}</span>
+      <span class="sz">${(f.size / 1024).toFixed(1)} KB</span>
+      <button class="x" data-idx="${i}" title="Remove">&times;</button>
     </div>
   `).join('');
 
   // Remove buttons
-  list.querySelectorAll('.remove').forEach(btn => {
+  list.querySelectorAll('.x').forEach(btn => {
     btn.addEventListener('click', () => {
       uploadedFiles.splice(parseInt(btn.dataset.idx), 1);
       renderFileList();

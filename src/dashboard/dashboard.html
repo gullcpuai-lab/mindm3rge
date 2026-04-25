@@ -3,482 +3,402 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tribunal — AI Multi-Model Validator</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <title>Tribunal</title>
+  <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --bg: #000000;
+      --card: rgba(28,28,30,0.8);
+      --card-border: rgba(255,255,255,0.08);
+      --elevated: rgba(44,44,46,0.6);
+      --text: #f5f5f7;
+      --text2: #a1a1a6;
+      --text3: #6e6e73;
+      --accent: #7c3aed;
+      --accent-soft: rgba(124,58,237,0.12);
+      --accent-glow: rgba(124,58,237,0.2);
+      --orange: #ff9f0a;
+      --green: #30d158;
+      --blue: #0a84ff;
+      --r: 16px;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #08080a;
-      color: #e4e4e7;
+      font-family: -apple-system, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
     }
 
-    /* ─── Header ─── */
-    .header {
-      padding: 16px 28px;
+    /* ══ Header ══ */
+    .nav {
+      padding: 12px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: rgba(8,8,10,0.8);
-      backdrop-filter: blur(20px) saturate(180%);
-      border-bottom: 1px solid rgba(255,255,255,0.06);
+      position: sticky; top: 0; z-index: 10;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(40px) saturate(200%);
+      -webkit-backdrop-filter: blur(40px) saturate(200%);
+      border-bottom: 0.5px solid rgba(255,255,255,0.08);
     }
-    .logo {
-      font-size: 20px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      background: linear-gradient(135deg, #a78bfa, #7c3aed);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .nav-logo {
+      font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
     }
-    .header-right { display: flex; gap: 8px; align-items: center; }
+    .nav-logo em { font-style: normal; color: var(--accent); }
+    .nav-actions { display: flex; gap: 6px; }
+    .nav-btn {
+      padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      border: 0.5px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);
+      color: var(--text2); cursor: pointer; font-family: inherit; transition: all 0.2s;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .nav-btn.active { border-color: var(--orange); color: var(--orange); }
 
-    /* ─── Layout ─── */
-    .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 100px; }
+    /* ══ Container ══ */
+    .wrap { max-width: 720px; margin: 0 auto; padding: 32px 20px 120px; }
 
-    /* ─── Cards ─── */
-    .card {
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 20px;
-      padding: 28px;
-      margin-bottom: 20px;
-      backdrop-filter: blur(10px);
+    /* ══ Section ══ */
+    .section { margin-bottom: 28px; }
+    .section-head {
+      display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+    }
+    .section-head h3 {
+      font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.2px;
+    }
+    .info-icon {
+      width: 16px; height: 16px; border-radius: 50%;
+      background: rgba(255,255,255,0.06); border: 0.5px solid rgba(255,255,255,0.1);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 9px; color: var(--text3); cursor: help; position: relative;
+      font-weight: 700; font-style: italic; font-family: Georgia, serif;
+    }
+    .info-icon:hover::after {
+      content: attr(data-tip);
+      position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+      background: var(--elevated); border: 0.5px solid rgba(255,255,255,0.15);
+      border-radius: 10px; padding: 8px 12px; font-size: 11px; font-weight: 400;
+      font-style: normal; font-family: -apple-system, sans-serif;
+      color: var(--text2); white-space: nowrap; z-index: 100;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      max-width: 280px; white-space: normal; line-height: 1.4;
     }
 
-    .section-label {
-      font-size: 10px;
-      font-weight: 600;
-      color: #71717a;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      margin-bottom: 12px;
+    /* ══ Model Selector ══ */
+    .models { display: flex; gap: 8px; }
+    .model {
+      flex: 1; padding: 16px 12px 12px; border-radius: var(--r);
+      background: var(--card); border: 0.5px solid var(--card-border);
+      text-align: center; cursor: pointer; transition: all 0.2s;
+      position: relative; user-select: none;
     }
-    .section-hint {
-      font-size: 11px;
-      color: #3f3f46;
-      margin-bottom: 10px;
+    .model:hover { border-color: rgba(255,255,255,0.15); }
+    .model.on { border-color: rgba(124,58,237,0.5); background: var(--accent-soft); }
+    .model input { display: none; }
+    .model .dot { width: 28px; height: 28px; border-radius: 50%; margin: 0 auto 6px; }
+    .model .dot.c { background: var(--orange); }
+    .model .dot.g { background: var(--green); }
+    .model .dot.b { background: var(--blue); }
+    .model .lbl { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .model.on .lbl { color: var(--text); }
+    .model .ck {
+      position: absolute; top: 6px; right: 6px; width: 18px; height: 18px;
+      border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.15);
+      display: flex; align-items: center; justify-content: center; font-size: 10px;
+      color: transparent; transition: all 0.15s;
     }
+    .model.on .ck { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-    /* ─── Model Cards ─── */
-    .model-grid { display: flex; gap: 10px; margin-bottom: 20px; }
-    .model-card {
-      flex: 1;
-      padding: 14px 12px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 14px;
-      background: rgba(255,255,255,0.02);
+    .starter-row { display: flex; gap: 6px; margin-top: 12px; }
+    .starter {
+      flex: 1; padding: 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+      border: 0.5px solid var(--card-border); background: transparent;
+      color: var(--text3); cursor: pointer; font-family: inherit; transition: all 0.15s;
       text-align: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      position: relative;
     }
-    .model-card:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
-    .model-card.selected { border-color: rgba(124,58,237,0.5); background: rgba(124,58,237,0.06); }
-    .model-card .icon { font-size: 20px; margin-bottom: 4px; display: block; }
-    .model-card .name { font-size: 12px; font-weight: 600; color: #a1a1aa; }
-    .model-card.selected .name { color: #c4b5fd; }
-    .model-card .check {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      width: 16px;
-      height: 16px;
-      border-radius: 4px;
-      border: 1.5px solid rgba(255,255,255,0.15);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      transition: all 0.15s;
-    }
-    .model-card.selected .check { background: #7c3aed; border-color: #7c3aed; }
-    .model-card input[type="checkbox"] { display: none; }
+    .starter:hover { color: var(--text2); }
+    .starter.on { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: var(--accent-soft); }
 
-    .starter-grid { display: flex; gap: 8px; margin-bottom: 4px; }
-    .starter-btn {
-      flex: 1;
-      padding: 10px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 10px;
-      background: transparent;
-      color: #52525b;
-      font-size: 11px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-family: inherit;
+    /* ══ Passes ══ */
+    .passes { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .pass {
+      width: 44px; height: 36px; border-radius: 10px; font-size: 13px; font-weight: 500;
+      border: 0.5px solid var(--card-border); background: transparent;
+      color: var(--text3); cursor: pointer; font-family: inherit; transition: all 0.15s;
     }
-    .starter-btn:hover { color: #a1a1aa; }
-    .starter-btn.selected { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: rgba(124,58,237,0.05); }
+    .pass:hover { color: var(--text2); }
+    .pass.on { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: var(--accent-soft); }
+    .pass-input {
+      width: 56px; height: 36px; border-radius: 10px; font-size: 13px;
+      border: 0.5px solid var(--card-border); background: transparent;
+      color: var(--text); text-align: center; font-family: inherit;
+    }
+    .pass-input:focus { border-color: var(--accent); outline: none; }
 
-    /* ─── Pass Chips ─── */
-    .pass-grid { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
-    .pass-btn {
-      padding: 8px 14px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 10px;
-      background: transparent;
-      color: #52525b;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-      font-family: inherit;
+    /* ══ Prompt ══ */
+    .prompt-box {
+      width: 100%; min-height: 140px; padding: 16px; font-size: 15px; line-height: 1.6;
+      border: 0.5px solid var(--card-border); border-radius: var(--r);
+      background: var(--card); color: var(--text); font-family: inherit; resize: vertical;
     }
-    .pass-btn:hover { color: #a1a1aa; }
-    .pass-btn.selected { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: rgba(124,58,237,0.05); }
-    .pass-custom {
-      width: 56px;
-      padding: 8px 6px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 10px;
-      background: transparent;
-      color: #e4e4e7;
-      font-size: 12px;
-      text-align: center;
-      font-family: inherit;
-    }
-    .pass-custom:focus { border-color: rgba(124,58,237,0.5); outline: none; }
+    .prompt-box:focus { border-color: rgba(124,58,237,0.4); outline: none; }
+    .prompt-box::placeholder { color: var(--text3); }
 
-    /* ─── Textarea ─── */
-    textarea {
-      width: 100%;
-      min-height: 130px;
-      padding: 16px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 14px;
-      background: rgba(0,0,0,0.3);
-      color: #e4e4e7;
-      font-size: 14px;
-      font-family: inherit;
-      line-height: 1.6;
-      resize: vertical;
-      margin-bottom: 4px;
+    /* ══ Directives ══ */
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .chip {
+      padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+      border: 0.5px solid var(--card-border); background: transparent;
+      color: var(--text3); cursor: pointer; font-family: inherit; transition: all 0.15s;
     }
-    textarea:focus { border-color: rgba(124,58,237,0.4); outline: none; }
-    textarea::placeholder { color: #3f3f46; }
-
-    /* ─── Directives ─── */
-    .directive-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-    .dir-chip {
-      padding: 6px 14px;
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 20px;
-      font-size: 11px;
-      font-weight: 500;
-      color: #52525b;
-      cursor: pointer;
-      transition: all 0.15s;
-      background: transparent;
-      font-family: inherit;
-    }
-    .dir-chip:hover { color: #a1a1aa; border-color: rgba(255,255,255,0.12); }
-    .dir-chip.selected { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: rgba(124,58,237,0.06); }
+    .chip:hover { color: var(--text2); border-color: rgba(255,255,255,0.15); }
+    .chip.on { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: var(--accent-soft); }
 
     .custom-directives { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
-    .custom-directive-row { display: flex; gap: 6px; align-items: center; }
-    .custom-directive-row input {
-      flex: 1;
-      padding: 8px 14px;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
-      background: rgba(0,0,0,0.3);
-      color: #e4e4e7;
-      font-size: 12px;
-      font-family: inherit;
+    .cd-row { display: flex; gap: 6px; align-items: center; }
+    .cd-row input {
+      flex: 1; padding: 9px 14px; border-radius: 10px; font-size: 12px;
+      border: 0.5px solid var(--card-border); background: var(--card);
+      color: var(--text); font-family: inherit;
     }
-    .custom-directive-row input:focus { border-color: rgba(124,58,237,0.4); outline: none; }
-    .custom-directive-row button { background: none; border: none; color: #3f3f46; cursor: pointer; font-size: 16px; padding: 4px; }
-    .custom-directive-row button:hover { color: #ef4444; }
-    .add-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 12px;
-      border: 1px dashed rgba(255,255,255,0.08);
-      border-radius: 10px;
-      background: transparent;
-      color: #3f3f46;
-      font-size: 11px;
-      cursor: pointer;
-      font-family: inherit;
-      transition: all 0.15s;
+    .cd-row input:focus { border-color: var(--accent); outline: none; }
+    .cd-row .rm { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 16px; padding: 4px; }
+    .cd-row .rm:hover { color: #ff453a; }
+    .add-cd {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 12px; color: var(--text3); cursor: pointer;
+      background: none; border: none; font-family: inherit; padding: 4px 0;
     }
-    .add-btn:hover { border-color: rgba(255,255,255,0.15); color: #71717a; }
+    .add-cd:hover { color: var(--text2); }
 
-    /* ─── Files ─── */
-    .file-zone {
-      padding: 12px 16px;
-      border: 1px dashed rgba(255,255,255,0.08);
-      border-radius: 12px;
-      cursor: pointer;
-      font-size: 12px;
-      color: #3f3f46;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
+    /* ══ Files ══ */
+    .drop-zone {
+      padding: 14px 16px; border-radius: 12px;
+      border: 0.5px dashed rgba(255,255,255,0.1);
+      font-size: 12px; color: var(--text3); cursor: pointer;
+      display: flex; align-items: center; gap: 8px;
+      transition: all 0.15s; margin-bottom: 8px;
     }
-    .file-zone:hover { border-color: rgba(255,255,255,0.15); color: #71717a; }
-    .file-zone input { display: none; }
-    .file-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
-    .file-item {
-      display: flex;
-      align-items: center;
-      padding: 8px 12px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.04);
-      border-radius: 10px;
-      font-size: 11px;
-      color: #a1a1aa;
+    .drop-zone:hover { border-color: rgba(255,255,255,0.2); color: var(--text2); }
+    .drop-zone input { display: none; }
+    .file-list { display: flex; flex-direction: column; gap: 4px; }
+    .f-item {
+      display: flex; align-items: center; padding: 8px 12px; font-size: 12px;
+      background: rgba(255,255,255,0.03); border-radius: 10px; color: var(--text2);
     }
-    .file-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-item .size { color: #3f3f46; margin: 0 10px; white-space: nowrap; font-size: 10px; }
-    .file-item .remove { background: none; border: none; color: #3f3f46; cursor: pointer; font-size: 14px; }
-    .file-item .remove:hover { color: #ef4444; }
-    .file-count { font-size: 10px; color: #3f3f46; margin-bottom: 8px; }
+    .f-item .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .f-item .sz { color: var(--text3); margin: 0 10px; font-size: 10px; }
+    .f-item .x { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 14px; }
+    .f-item .x:hover { color: #ff453a; }
+    .f-count { font-size: 10px; color: var(--text3); margin-top: 4px; }
 
-    /* ─── CTA Button ─── */
-    .btn-start {
-      width: 100%;
-      padding: 16px;
-      border: none;
-      border-radius: 14px;
-      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 50%, #5b21b6 100%);
-      color: white;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
+    /* ══ CTA ══ */
+    .cta {
+      width: 100%; padding: 16px; border: none; border-radius: 14px;
+      background: var(--accent); color: #fff; font-size: 16px; font-weight: 600;
+      cursor: pointer; font-family: inherit; letter-spacing: -0.2px;
       transition: all 0.2s;
-      font-family: inherit;
-      letter-spacing: -0.2px;
-      margin-top: 8px;
     }
-    .btn-start:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(124,58,237,0.25); }
-    .btn-start:active { transform: translateY(0); }
-    .btn-start:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+    .cta:hover { filter: brightness(1.1); box-shadow: 0 0 40px var(--accent-glow); }
+    .cta:active { transform: scale(0.99); }
+    .cta:disabled { opacity: 0.3; cursor: not-allowed; filter: none; box-shadow: none; transform: none; }
 
-    /* ─── Utility Buttons ─── */
-    .btn {
-      padding: 8px 16px;
-      border-radius: 10px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-      border: 1px solid rgba(255,255,255,0.06);
-      background: rgba(255,255,255,0.03);
-      color: #a1a1aa;
-      font-family: inherit;
+    /* ══ Separator ══ */
+    .sep { height: 0.5px; background: rgba(255,255,255,0.06); margin: 20px 0; }
+
+    /* ══ Discussion ══ */
+    .prog-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-bottom: 6px; font-weight: 500; }
+    .prog-bar { background: rgba(255,255,255,0.04); border-radius: 4px; height: 3px; margin-bottom: 24px; overflow: hidden; }
+    .prog-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #a78bfa); border-radius: 4px; transition: width 0.5s; }
+    .discussion { display: flex; flex-direction: column; gap: 12px; }
+    .turn {
+      background: var(--card); border: 0.5px solid var(--card-border);
+      border-radius: var(--r); overflow: hidden; animation: fadeUp 0.3s ease;
     }
-    .btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
-    .btn-primary { background: #7c3aed; border-color: #7c3aed; color: white; }
-    .btn-primary:hover { background: #6d28d9; }
-    .toggle-tabs {
-      display: flex; align-items: center; gap: 6px;
-      padding: 8px 14px; border-radius: 10px; font-size: 12px; cursor: pointer;
-      border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03);
-      color: #52525b; transition: all 0.15s; font-family: inherit;
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .turn-top {
+      display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+      border-bottom: 0.5px solid rgba(255,255,255,0.04);
     }
-    .toggle-tabs:hover { color: #a1a1aa; }
-    .toggle-tabs.active { border-color: #f59e0b; color: #f59e0b; }
-
-    /* ─── Progress ─── */
-    .progress-bar { background: rgba(255,255,255,0.04); border-radius: 6px; height: 4px; margin-bottom: 24px; overflow: hidden; }
-    .progress-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 6px; transition: width 0.5s ease; }
-    .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: #3f3f46; margin-bottom: 6px; font-weight: 500; }
-
-    /* ─── Turn Cards ─── */
-    .discussion { display: flex; flex-direction: column; gap: 14px; }
-    .turn-card {
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 16px;
-      overflow: hidden;
-      animation: slideIn 0.3s ease;
+    .turn-name { font-weight: 600; font-size: 13px; }
+    .turn-badge {
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;
+      padding: 3px 8px; border-radius: 6px; background: var(--accent-soft); color: #a78bfa;
     }
-    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    .turn-header {
-      display: flex; align-items: center; gap: 10px;
-      padding: 12px 18px;
-      background: rgba(255,255,255,0.01);
-      border-bottom: 1px solid rgba(255,255,255,0.04);
+    .turn-meta { font-size: 10px; color: var(--text3); margin-left: auto; }
+    .turn-body { padding: 14px 16px; font-size: 14px; line-height: 1.7; color: var(--text2); white-space: pre-wrap; }
+    .turn.claude .turn-top { border-left: 3px solid var(--orange); }
+    .turn.chatgpt .turn-top { border-left: 3px solid var(--green); }
+    .turn.gemini .turn-top { border-left: 3px solid var(--blue); }
+
+    .synth {
+      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(10,132,255,0.03));
+      border: 0.5px solid rgba(124,58,237,0.2);
+      border-radius: var(--r); padding: 20px; margin-top: 10px;
     }
-    .turn-model { font-weight: 600; font-size: 13px; }
-    .turn-role { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: rgba(124,58,237,0.1); color: #a78bfa; }
-    .turn-time { font-size: 10px; color: #3f3f46; margin-left: auto; }
-    .turn-body { padding: 16px 18px; font-size: 13.5px; line-height: 1.75; color: #a1a1aa; white-space: pre-wrap; }
+    .synth h3 { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
 
-    .turn-card.claude .turn-header { border-left: 3px solid #f59e0b; }
-    .turn-card.chatgpt .turn-header { border-left: 3px solid #10b981; }
-    .turn-card.gemini .turn-header { border-left: 3px solid #3b82f6; }
-
-    /* ─── Synthesis ─── */
-    .synthesis-card {
-      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(59,130,246,0.03));
-      border: 1px solid rgba(124,58,237,0.2);
-      border-radius: 16px;
-      padding: 22px;
-      margin-top: 10px;
-    }
-    .synthesis-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-
-    /* ─── Waiting ─── */
     .waiting {
       display: flex; align-items: center; gap: 10px;
-      padding: 14px 18px;
-      background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.04);
-      border-radius: 14px;
-      font-size: 12px; color: #52525b; margin-top: 14px;
+      padding: 12px 16px; background: var(--card); border: 0.5px solid var(--card-border);
+      border-radius: 12px; font-size: 12px; color: var(--text3); margin-top: 12px;
     }
-    .waiting .dots span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #7c3aed; animation: bounce 1s infinite; margin-right: 3px; }
-    .waiting .dots span:nth-child(2) { animation-delay: 0.15s; }
-    .waiting .dots span:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+    .waiting .d span { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); animation: bounce 1s infinite; margin: 0 1.5px; }
+    .waiting .d span:nth-child(2) { animation-delay: 0.15s; }
+    .waiting .d span:nth-child(3) { animation-delay: 0.3s; }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
 
     .actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
-    .hidden { display: none; }
+    .btn {
+      padding: 8px 16px; border-radius: 10px; font-size: 12px; font-weight: 500;
+      cursor: pointer; border: 0.5px solid var(--card-border); background: var(--card);
+      color: var(--text2); font-family: inherit; transition: all 0.15s;
+    }
+    .btn:hover { background: var(--elevated); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .btn-primary:hover { filter: brightness(1.1); }
 
-    /* ─── Divider ─── */
-    .divider { height: 1px; background: rgba(255,255,255,0.04); margin: 20px 0; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="logo">Tribunal</div>
-    <div class="header-right">
-      <button class="toggle-tabs" id="toggle-tabs-btn" title="Show/hide LLM browser tabs">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+  <div class="nav">
+    <div class="nav-logo"><em>Tribunal</em></div>
+    <div class="nav-actions">
+      <button class="nav-btn" id="toggle-tabs-btn">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
         LLM Tabs
       </button>
-      <button class="btn" id="history-btn">History</button>
+      <button class="nav-btn" id="history-btn">History</button>
     </div>
   </div>
 
-  <div class="container">
-    <!-- ─── Setup ─── -->
+  <div class="wrap">
     <div id="setup-section">
-      <!-- Models Card -->
-      <div class="card">
-        <div class="section-label">Participating Models</div>
-        <div class="section-hint">Check which models join the discussion</div>
-        <div class="model-grid">
-          <label class="model-card selected" data-model="claude">
+
+      <!-- ── Models ── -->
+      <div class="section">
+        <div class="section-head">
+          <h3>Models</h3>
+          <span class="info-icon" data-tip="Choose which AI models participate in the discussion. All checked models will review and critique each other's responses.">i</span>
+        </div>
+        <div class="models">
+          <label class="model on" data-model="claude">
             <input type="checkbox" class="model-toggle" data-model="claude" checked>
-            <div class="check">&#10003;</div>
-            <span class="icon">&#x1F7E0;</span>
-            <span class="name">Claude</span>
+            <div class="ck">&#10003;</div>
+            <div class="dot c"></div>
+            <div class="lbl">Claude</div>
           </label>
-          <label class="model-card selected" data-model="chatgpt">
+          <label class="model on" data-model="chatgpt">
             <input type="checkbox" class="model-toggle" data-model="chatgpt" checked>
-            <div class="check">&#10003;</div>
-            <span class="icon">&#x1F7E2;</span>
-            <span class="name">ChatGPT</span>
+            <div class="ck">&#10003;</div>
+            <div class="dot g"></div>
+            <div class="lbl">ChatGPT</div>
           </label>
-          <label class="model-card selected" data-model="gemini">
+          <label class="model on" data-model="gemini">
             <input type="checkbox" class="model-toggle" data-model="gemini" checked>
-            <div class="check">&#10003;</div>
-            <span class="icon">&#x1F535;</span>
-            <span class="name">Gemini</span>
+            <div class="ck">&#10003;</div>
+            <div class="dot b"></div>
+            <div class="lbl">Gemini</div>
           </label>
         </div>
-
-        <div class="section-label">Starts First</div>
-        <div class="starter-grid">
-          <button class="starter-btn selected starter-chip" data-model="claude">Claude</button>
-          <button class="starter-btn starter-chip" data-model="chatgpt">ChatGPT</button>
-          <button class="starter-btn starter-chip" data-model="gemini">Gemini</button>
+        <div class="section-head" style="margin-top: 14px;">
+          <h3>Starts First</h3>
+          <span class="info-icon" data-tip="This model generates the initial response. Other models then critique it.">i</span>
+        </div>
+        <div class="starter-row">
+          <button class="starter on starter-chip" data-model="claude">Claude</button>
+          <button class="starter starter-chip" data-model="chatgpt">ChatGPT</button>
+          <button class="starter starter-chip" data-model="gemini">Gemini</button>
         </div>
       </div>
 
-      <!-- Config Card -->
-      <div class="card">
-        <div class="section-label">Discussion Passes</div>
-        <div class="pass-grid">
-          <button class="pass-btn selected" data-passes="1">1</button>
-          <button class="pass-btn" data-passes="3">3</button>
-          <button class="pass-btn" data-passes="5">5</button>
-          <button class="pass-btn" data-passes="10">10</button>
-          <button class="pass-btn" data-passes="15">15</button>
-          <button class="pass-btn" data-passes="20">20</button>
-          <input type="number" class="pass-custom" id="custom-passes" min="1" placeholder="#">
+      <!-- ── Passes ── -->
+      <div class="section">
+        <div class="section-head">
+          <h3>Discussion Rounds</h3>
+          <span class="info-icon" data-tip="How many rounds of critique and revision. More rounds = deeper analysis but takes longer. 1 round: quick review. 3-5: thorough. 10+: exhaustive.">i</span>
+        </div>
+        <div class="passes">
+          <button class="pass on" data-passes="1">1</button>
+          <button class="pass" data-passes="3">3</button>
+          <button class="pass" data-passes="5">5</button>
+          <button class="pass" data-passes="10">10</button>
+          <button class="pass" data-passes="15">15</button>
+          <button class="pass" data-passes="20">20</button>
+          <input type="number" class="pass-input" id="custom-passes" min="1" placeholder="Custom">
         </div>
       </div>
 
-      <!-- Prompt Card -->
-      <div class="card">
-        <div class="section-label">Your Prompt</div>
-        <textarea id="prompt-input" placeholder="What do you want the models to discuss, analyze, or validate?"></textarea>
+      <!-- ── Prompt ── -->
+      <div class="section">
+        <div class="section-head">
+          <h3>Prompt</h3>
+          <span class="info-icon" data-tip="Your question or task. This is sent to the starting model first, then the other models critique the response.">i</span>
+        </div>
+        <textarea class="prompt-box" id="prompt-input" placeholder="What do you want the models to analyze, debate, or validate?"></textarea>
+      </div>
 
-        <div class="divider"></div>
-
-        <div class="section-label">Review Directives</div>
-        <div class="section-hint">What should models focus on when critiquing each other?</div>
-        <div class="directive-grid" id="directive-chips">
-          <button class="dir-chip selected" data-directive="strengths-weaknesses">Strengths &amp; Weaknesses</button>
-          <button class="dir-chip selected" data-directive="factual-accuracy">Factual Accuracy</button>
-          <button class="dir-chip selected" data-directive="logical-gaps">Logical Gaps</button>
-          <button class="dir-chip" data-directive="legal-sufficiency">Legal Sufficiency</button>
-          <button class="dir-chip" data-directive="risk-analysis">Risk Analysis</button>
-          <button class="dir-chip" data-directive="alternative-approaches">Alternatives</button>
-          <button class="dir-chip" data-directive="evidence-alignment">Evidence Alignment</button>
-          <button class="dir-chip" data-directive="bias-detection">Bias Detection</button>
-          <button class="dir-chip" data-directive="completeness">Completeness</button>
-          <button class="dir-chip" data-directive="clarity-readability">Clarity</button>
-          <button class="dir-chip" data-directive="counterarguments">Counterarguments</button>
-          <button class="dir-chip" data-directive="code-review">Code Review</button>
-          <button class="dir-chip" data-directive="security-analysis">Security</button>
+      <!-- ── Directives ── -->
+      <div class="section">
+        <div class="section-head">
+          <h3>Review Focus</h3>
+          <span class="info-icon" data-tip="Tell the models what to look for when reviewing each other. Selected items are included as instructions in every critique prompt.">i</span>
+        </div>
+        <div class="chips" id="directive-chips">
+          <button class="chip on" data-directive="strengths-weaknesses">Strengths &amp; Weaknesses</button>
+          <button class="chip on" data-directive="factual-accuracy">Factual Accuracy</button>
+          <button class="chip on" data-directive="logical-gaps">Logical Gaps</button>
+          <button class="chip" data-directive="legal-sufficiency">Legal Sufficiency</button>
+          <button class="chip" data-directive="risk-analysis">Risk Analysis</button>
+          <button class="chip" data-directive="alternative-approaches">Alternatives</button>
+          <button class="chip" data-directive="evidence-alignment">Evidence</button>
+          <button class="chip" data-directive="bias-detection">Bias</button>
+          <button class="chip" data-directive="completeness">Completeness</button>
+          <button class="chip" data-directive="clarity-readability">Clarity</button>
+          <button class="chip" data-directive="counterarguments">Counterarguments</button>
+          <button class="chip" data-directive="code-review">Code Review</button>
+          <button class="chip" data-directive="security-analysis">Security</button>
         </div>
         <div class="custom-directives" id="custom-directives"></div>
-        <button class="add-btn" id="add-custom-directive">+ Custom directive</button>
+        <button class="add-cd" id="add-custom-directive">+ Add custom focus area</button>
+      </div>
 
-        <div class="divider"></div>
-
-        <div class="section-label">Attachments</div>
-        <label class="file-zone">
+      <!-- ── Files ── -->
+      <div class="section">
+        <div class="section-head">
+          <h3>Documents</h3>
+          <span class="info-icon" data-tip="Upload files for all models to analyze. Files are attached natively to each model's chat (Claude, ChatGPT, Gemini) so they can read PDFs, images, and more.">i</span>
+        </div>
+        <label class="drop-zone">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-          Attach documents (up to 10)
-          <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv,.json,.xml,.html" multiple>
+          Attach files — up to 10
+          <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv,.json,.xml,.html,.py,.js,.ts" multiple>
         </label>
         <div class="file-list" id="file-list"></div>
-        <div class="file-count" id="file-count"></div>
+        <div class="f-count" id="file-count"></div>
       </div>
 
-      <button class="btn-start" id="start-btn">Start Discussion</button>
+      <button class="cta" id="start-btn">Start Discussion</button>
     </div>
 
-    <!-- ─── Discussion ─── -->
+    <!-- ── Discussion ── -->
     <div id="discussion-section" class="hidden">
-      <div class="progress-label">
-        <span>Pass <span id="pass-current">1</span> of <span id="pass-total">1</span></span>
+      <div class="prog-label">
+        <span>Round <span id="pass-current">1</span> / <span id="pass-total">1</span></span>
         <span><span id="turn-count">0</span> turns</span>
       </div>
-      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
-
+      <div class="prog-bar"><div class="prog-fill" id="progress-fill" style="width:0%"></div></div>
       <div class="discussion" id="discussion-feed"></div>
-
       <div class="waiting hidden" id="waiting-indicator">
-        <div class="dots"><span></span><span></span><span></span></div>
-        <span id="waiting-text">Waiting for Claude to respond...</span>
+        <div class="d"><span></span><span></span><span></span></div>
+        <span id="waiting-text">Waiting for Claude...</span>
       </div>
-
-      <div class="synthesis-card hidden" id="synthesis-card">
-        <h3>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          Final Synthesis
-        </h3>
-        <div id="synthesis-content" style="font-size:13.5px;line-height:1.75;color:#a1a1aa;white-space:pre-wrap;"></div>
+      <div class="synth hidden" id="synthesis-card">
+        <h3>&#10024; Final Synthesis</h3>
+        <div id="synthesis-content" style="font-size:14px;line-height:1.7;color:var(--text2);white-space:pre-wrap;"></div>
       </div>
-
       <div class="actions" id="action-buttons" style="display:none;">
         <button class="btn btn-primary" id="new-btn">New Session</button>
         <button class="btn" id="copy-btn">Copy Result</button>
