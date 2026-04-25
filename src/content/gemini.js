@@ -16,16 +16,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function uploadFilesThenPrompt(files, prompt) {
-  // Gemini uses a + button or file upload area
-  const attachBtn = document.querySelector('button[aria-label="Upload file"]')
-    || document.querySelector('uploader button')
-    || document.querySelector('.upload-button');
+  // Try native file upload first
+  let uploaded = false;
 
+  // Look for file input (available on Gemini Advanced/Plus)
   let fileInput = document.querySelector('input[type="file"]');
-  if (!fileInput && attachBtn) {
-    attachBtn.click();
-    await new Promise(r => setTimeout(r, 500));
-    fileInput = document.querySelector('input[type="file"]');
+
+  // Try clicking the + button to reveal upload option
+  if (!fileInput) {
+    const plusBtns = document.querySelectorAll('button');
+    for (const b of plusBtns) {
+      if (b.textContent?.trim() === '+' || b.getAttribute('aria-label')?.includes('Add')) {
+        b.click();
+        await new Promise(r => setTimeout(r, 1000));
+        fileInput = document.querySelector('input[type="file"]');
+        break;
+      }
+    }
+  }
+
+  // Try clicking explicit upload menu item
+  if (!fileInput) {
+    const uploadItem = document.querySelector('[data-test-id="upload-file"], button[aria-label*="Upload"]');
+    if (uploadItem) {
+      uploadItem.click();
+      await new Promise(r => setTimeout(r, 1000));
+      fileInput = document.querySelector('input[type="file"]');
+    }
   }
 
   if (fileInput) {
@@ -40,10 +57,23 @@ async function uploadFilesThenPrompt(files, prompt) {
     }
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[Tribunal] Uploaded', files.length, 'files to Gemini');
+    console.log('[Tribunal] Uploaded', files.length, 'files to Gemini natively');
+    uploaded = true;
     await new Promise(r => setTimeout(r, 2000));
-  } else {
-    console.log('[Tribunal] No file input found on Gemini');
+  }
+
+  if (!uploaded) {
+    // Fallback: paste file contents as text context in the prompt
+    console.log('[Tribunal] Gemini native upload not available — injecting file content as text');
+    const fileContext = files.map((f, i) => {
+      try {
+        const binary = atob(f.base64);
+        return `--- FILE ${i + 1}: ${f.name} ---\n${binary}\n--- END ${f.name} ---`;
+      } catch {
+        return `--- FILE ${i + 1}: ${f.name} (binary, not displayable) ---`;
+      }
+    }).join('\n\n');
+    prompt = prompt + '\n\n' + fileContext;
   }
 
   injectPrompt(prompt);
