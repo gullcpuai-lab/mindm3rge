@@ -16,30 +16,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function uploadFilesThenPrompt(files, prompt) {
-  // Try native file upload first
   let uploaded = false;
-
-  // Look for file input (available on Gemini Advanced/Plus)
   let fileInput = document.querySelector('input[type="file"]');
 
-  // Try clicking the + button to reveal upload option
+  // Step 1: Click the + button to open the upload menu
   if (!fileInput) {
-    const plusBtns = document.querySelectorAll('button');
-    for (const b of plusBtns) {
-      if (b.textContent?.trim() === '+' || b.getAttribute('aria-label')?.includes('Add')) {
-        b.click();
-        await new Promise(r => setTimeout(r, 1000));
-        fileInput = document.querySelector('input[type="file"]');
-        break;
-      }
+    const openMenuBtn = document.querySelector('button[aria-label*="Open upload file menu"]')
+      || document.querySelector('button[aria-label*="upload"]');
+    if (openMenuBtn) {
+      openMenuBtn.click();
+      await new Promise(r => setTimeout(r, 1000));
     }
   }
 
-  // Try clicking explicit upload menu item
+  // Step 2: Click "Upload files" in the menu that appeared
   if (!fileInput) {
-    const uploadItem = document.querySelector('[data-test-id="upload-file"], button[aria-label*="Upload"]');
-    if (uploadItem) {
-      uploadItem.click();
+    const uploadBtn = document.querySelector('button[aria-label*="Upload files"]');
+    if (uploadBtn) {
+      uploadBtn.click();
       await new Promise(r => setTimeout(r, 1000));
       fileInput = document.querySelector('input[type="file"]');
     }
