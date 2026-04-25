@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tribunal</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 400px;
+      min-height: 500px;
+      max-height: 600px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #f0f0f0;
+      overflow-y: auto;
+    }
+
+    .header {
+      padding: 16px;
+      border-bottom: 1px solid #2a2a2a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 18px; font-weight: 700; }
+    .header .badge { font-size: 10px; color: #737373; }
+
+    .section { padding: 16px; }
+    .section-title { font-size: 11px; color: #737373; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; font-weight: 600; }
+
+    textarea, select, input[type="file"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      background: #141414;
+      color: #f0f0f0;
+      font-size: 13px;
+      resize: vertical;
+      font-family: inherit;
+    }
+    textarea:focus, select:focus { border-color: #7c3aed; outline: none; }
+    textarea { min-height: 100px; }
+
+    .model-select {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .model-btn {
+      flex: 1;
+      padding: 10px 8px;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      background: #141414;
+      color: #f0f0f0;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .model-btn:hover { border-color: #444; }
+    .model-btn.selected { border-color: #7c3aed; background: rgba(124, 58, 237, 0.15); color: #a78bfa; }
+    .model-btn .icon { font-size: 18px; display: block; margin-bottom: 4px; }
+
+    .passes-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .pass-btn {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #2a2a2a;
+      border-radius: 8px;
+      background: #141414;
+      color: #737373;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.15s;
+    }
+    .pass-btn:hover { color: #f0f0f0; }
+    .pass-btn.selected { border-color: #7c3aed; color: #a78bfa; background: rgba(124, 58, 237, 0.1); }
+
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #7c3aed;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-primary:hover { background: #6d28d9; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-secondary {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      background: transparent;
+      color: #f0f0f0;
+      font-size: 13px;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    /* Status view */
+    .status-card {
+      background: #141414;
+      border: 1px solid #2a2a2a;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .status-label { font-size: 11px; color: #737373; text-transform: uppercase; }
+    .status-value { font-size: 14px; font-weight: 600; }
+    .status-value.running { color: #22c55e; }
+    .status-value.complete { color: #7c3aed; }
+
+    .turn-item {
+      padding: 10px;
+      border-left: 3px solid #2a2a2a;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .turn-item.claude { border-left-color: #d97706; }
+    .turn-item.chatgpt { border-left-color: #10b981; }
+    .turn-item.gemini { border-left-color: #3b82f6; }
+    .turn-model { font-weight: 600; font-size: 11px; text-transform: uppercase; margin-bottom: 4px; }
+    .turn-role { color: #737373; font-size: 10px; }
+    .turn-preview { color: #a0a0a0; font-size: 11px; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+    .file-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px dashed #2a2a2a;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #737373;
+      margin-bottom: 12px;
+    }
+    .file-label:hover { border-color: #444; color: #f0f0f0; }
+    .file-label input { display: none; }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>Tribunal</h1>
+    <span class="badge">Multi-Model Validator</span>
+  </div>
+
+  <!-- New Session View -->
+  <div id="new-session">
+    <div class="section">
+      <div class="section-title">Starting Model</div>
+      <div class="model-select">
+        <button class="model-btn selected" data-model="claude">
+          <span class="icon">🟠</span> Claude
+        </button>
+        <button class="model-btn" data-model="chatgpt">
+          <span class="icon">🟢</span> ChatGPT
+        </button>
+        <button class="model-btn" data-model="gemini">
+          <span class="icon">🔵</span> Gemini
+        </button>
+      </div>
+
+      <div class="section-title">Discussion Passes</div>
+      <div class="passes-row">
+        <button class="pass-btn selected" data-passes="1">1 pass</button>
+        <button class="pass-btn" data-passes="3">3 passes</button>
+        <button class="pass-btn" data-passes="5">5 passes</button>
+        <button class="pass-btn" data-passes="10">10 passes</button>
+      </div>
+
+      <div class="section-title">Your Prompt</div>
+      <textarea id="prompt-input" placeholder="Enter your prompt here... The models will discuss, critique, and refine the answer."></textarea>
+
+      <label class="file-label">
+        <span>📎</span> Attach a document (optional)
+        <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv">
+      </label>
+      <div id="file-name" class="hidden" style="font-size: 11px; color: #737373; margin-bottom: 12px;"></div>
+
+      <button class="btn-primary" id="start-btn">Start Discussion</button>
+    </div>
+  </div>
+
+  <!-- Running / Complete View -->
+  <div id="session-view" class="hidden">
+    <div class="section">
+      <div class="status-card">
+        <div class="status-header">
+          <span class="status-label">Status</span>
+          <span class="status-value running" id="session-status">Running...</span>
+        </div>
+        <div style="font-size: 11px; color: #737373;">
+          Pass <span id="current-pass">1</span> of <span id="total-passes">1</span> ·
+          <span id="turn-count">0</span> turns
+        </div>
+      </div>
+
+      <div class="section-title">Discussion</div>
+      <div id="turns-list"></div>
+
+      <button class="btn-secondary" id="cancel-btn">Cancel</button>
+      <button class="btn-primary hidden" id="new-session-btn" style="margin-top: 8px;">New Session</button>
+      <button class="btn-secondary hidden" id="copy-btn">Copy Final Answer</button>
+    </div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
