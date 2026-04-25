@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tribunal — Think deeper.</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #000000;
+      --text: #f5f5f7;
+      --text2: #86868b;
+      --accent: #7c5cfc;
+      --glow: rgba(124,92,252,0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ─── Nav ─── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      padding: 16px 40px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      border-bottom: 0.5px solid rgba(255,255,255,0.06);
+    }
+    nav .logo {
+      font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #7c5cfc, #00d4aa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    nav .cta-sm {
+      padding: 8px 20px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      background: var(--accent); color: #fff; border: none; cursor: pointer;
+      font-family: inherit; transition: all 0.2s;
+    }
+    nav .cta-sm:hover { box-shadow: 0 0 30px var(--glow); }
+
+    /* ─── Hero ─── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center;
+      padding: 120px 24px 80px;
+      position: relative;
+    }
+    .hero::before {
+      content: '';
+      position: absolute; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 800px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(124,92,252,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 16px; border-radius: 20px;
+      background: rgba(124,92,252,0.08); border: 0.5px solid rgba(124,92,252,0.2);
+      font-size: 12px; font-weight: 500; color: #a78bfa;
+      margin-bottom: 32px;
+    }
+    .hero h1 {
+      font-size: clamp(48px, 8vw, 80px);
+      font-weight: 900;
+      letter-spacing: -3px;
+      line-height: 1;
+      margin-bottom: 24px;
+      max-width: 800px;
+    }
+    .hero h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, #7c5cfc, #00d4aa);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: clamp(17px, 2.5vw, 21px);
+      color: var(--text2);
+      max-width: 560px;
+      line-height: 1.6;
+      margin-bottom: 40px;
+    }
+    .hero-cta {
+      padding: 16px 40px; border-radius: 14px; font-size: 17px; font-weight: 600;
+      background: linear-gradient(135deg, #7c5cfc, #00d4aa);
+      color: #fff; border: none; cursor: pointer; font-family: inherit;
+      transition: all 0.2s; letter-spacing: -0.3px;
+    }
+    .hero-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 40px var(--glow); }
+
+    /* ─── How it works ─── */
+    .section {
+      padding: 120px 24px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    .section-label {
+      font-size: 13px; font-weight: 600; color: var(--accent);
+      text-transform: uppercase; letter-spacing: 1.5px;
+      text-align: center; margin-bottom: 16px;
+    }
+    .section h2 {
+      font-size: clamp(36px, 5vw, 52px);
+      font-weight: 800;
+      letter-spacing: -2px;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .section .sub {
+      font-size: 18px; color: var(--text2); text-align: center;
+      max-width: 500px; margin: 0 auto 64px; line-height: 1.6;
+    }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 0; position: relative; }
+    .steps::before {
+      content: ''; position: absolute; left: 39px; top: 40px; bottom: 40px;
+      width: 2px; background: linear-gradient(180deg, var(--accent), rgba(124,92,252,0.1));
+    }
+    .step {
+      display: flex; gap: 32px; align-items: flex-start;
+      padding: 32px 0;
+    }
+    .step-num {
+      width: 80px; height: 80px; flex-shrink: 0;
+      border-radius: 24px;
+      background: rgba(124,92,252,0.08);
+      border: 0.5px solid rgba(124,92,252,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 800; color: var(--accent);
+      position: relative; z-index: 1;
+    }
+    .step-content h3 {
+      font-size: 24px; font-weight: 700; letter-spacing: -0.5px;
+      margin-bottom: 8px; margin-top: 8px;
+    }
+    .step-content p {
+      font-size: 16px; color: var(--text2); line-height: 1.7; max-width: 500px;
+    }
+
+    /* ─── Models ─── */
+    .models-row {
+      display: flex; gap: 20px; justify-content: center;
+      margin-top: 48px;
+    }
+    .model-showcase {
+      width: 180px; padding: 32px 20px; border-radius: 24px;
+      background: rgba(255,255,255,0.03);
+      border: 0.5px solid rgba(255,255,255,0.06);
+      text-align: center;
+      transition: all 0.3s;
+    }
+    .model-showcase:hover {
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-4px);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+    }
+    .model-showcase .icon { font-size: 36px; margin-bottom: 12px; }
+    .model-showcase .name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .model-showcase .co { font-size: 12px; color: var(--text2); }
+
+    /* ─── Features ─── */
+    .features-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    }
+    .feature {
+      padding: 32px 24px; border-radius: 20px;
+      background: rgba(255,255,255,0.02);
+      border: 0.5px solid rgba(255,255,255,0.06);
+      transition: all 0.3s;
+    }
+    .feature:hover { border-color: rgba(255,255,255,0.1); }
+    .feature .fi { font-size: 28px; margin-bottom: 14px; }
+    .feature h4 { font-size: 17px; font-weight: 700; margin-bottom: 8px; letter-spacing: -0.3px; }
+    .feature p { font-size: 14px; color: var(--text2); line-height: 1.6; }
+
+    /* ─── Final CTA ─── */
+    .final {
+      text-align: center;
+      padding: 120px 24px 160px;
+    }
+    .final h2 {
+      font-size: clamp(36px, 5vw, 56px);
+      font-weight: 900; letter-spacing: -2px;
+      margin-bottom: 16px;
+    }
+    .final p {
+      font-size: 18px; color: var(--text2); margin-bottom: 40px;
+      max-width: 420px; margin-left: auto; margin-right: auto; line-height: 1.6;
+    }
+
+    /* ─── Footer ─── */
+    footer {
+      padding: 32px 40px;
+      border-top: 0.5px solid rgba(255,255,255,0.06);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; color: var(--text2);
+    }
+
+    @media (max-width: 768px) {
+      .features-grid { grid-template-columns: 1fr; }
+      .models-row { flex-direction: column; align-items: center; }
+      .step { flex-direction: column; gap: 16px; }
+      .steps::before { display: none; }
+      nav { padding: 12px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="logo">Tribunal</div>
+    <button class="cta-sm" onclick="window.location.href='dashboard.html'">Open Dashboard</button>
+  </nav>
+
+  <!-- ═══ Hero ═══ -->
+  <section class="hero">
+    <div class="hero-badge">Introducing Tribunal</div>
+    <h1>One prompt.<br><em>Three minds.</em></h1>
+    <p>Submit a question. Three AI models debate, critique, and refine each other's answers. Get a final response that's been stress-tested from every angle.</p>
+    <button class="hero-cta" onclick="window.location.href='dashboard.html'">Start a Discussion</button>
+  </section>
+
+  <!-- ═══ How It Works ═══ -->
+  <section class="section">
+    <div class="section-label">How It Works</div>
+    <h2>Structured AI deliberation</h2>
+    <p class="sub">Three steps. Multiple rounds. One answer you can trust.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>Ask once</h3>
+          <p>Type your question, upload your documents, and choose which models participate. Your starting model generates the first response.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>Models critique each other</h3>
+          <p>The other models receive the response and tear it apart. They identify weaknesses, challenge assumptions, flag risks, and propose alternatives. Then the original model revises.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3>Get a battle-tested answer</h3>
+          <p>After multiple rounds of back-and-forth, the system synthesizes everything into a final answer that's been validated from every perspective. Consensus, disagreements, and confidence — all transparent.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Models ═══ -->
+  <section class="section">
+    <div class="section-label">Powered By</div>
+    <h2>The best models, working together</h2>
+    <p class="sub">Each model brings different strengths. Together, they catch what individuals miss.</p>
+
+    <div class="models-row">
+      <div class="model-showcase">
+        <div class="icon" style="color: #D97706;">&#10038;</div>
+        <div class="name">Claude</div>
+        <div class="co">Anthropic</div>
+      </div>
+      <div class="model-showcase">
+        <div class="icon" style="color: #10a37f;">&#10070;</div>
+        <div class="name">ChatGPT</div>
+        <div class="co">OpenAI</div>
+      </div>
+      <div class="model-showcase">
+        <div class="icon" style="color: #4285F4;">&#10022;</div>
+        <div class="name">Gemini</div>
+        <div class="co">Google</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Features ═══ -->
+  <section class="section">
+    <div class="section-label">Features</div>
+    <h2>Built for critical thinking</h2>
+    <p class="sub">Everything you need for rigorous multi-model analysis.</p>
+
+    <div class="features-grid">
+      <div class="feature">
+        <div class="fi">&#128269;</div>
+        <h4>Custom Review Focus</h4>
+        <p>Tell the models exactly what to look for. Legal sufficiency, factual accuracy, bias, code quality — or add your own criteria.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128206;</div>
+        <h4>Document Upload</h4>
+        <p>Attach up to 10 files. PDFs, code, images, spreadsheets — uploaded natively to each model for deep analysis.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128260;</div>
+        <h4>Multi-Round Debate</h4>
+        <p>Configure 1 to unlimited rounds. More rounds means deeper scrutiny, stronger conclusions, and higher confidence.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128200;</div>
+        <h4>Live Progress</h4>
+        <p>Watch the discussion unfold in real time. A visual timeline tracks every step — who responded, who's thinking, what's next.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128274;</div>
+        <h4>Your Accounts</h4>
+        <p>Uses your existing Claude, ChatGPT, and Gemini sessions. No API keys. No extra cost. Your subscriptions, amplified.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128190;</div>
+        <h4>Export Everything</h4>
+        <p>Copy the final answer or export the full discussion as Markdown. Session history saves every conversation.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Use Cases ═══ -->
+  <section class="section">
+    <div class="section-label">Use Cases</div>
+    <h2>For decisions that matter</h2>
+    <p class="sub">When getting it right isn't optional.</p>
+
+    <div class="features-grid">
+      <div class="feature">
+        <div class="fi">&#9878;</div>
+        <h4>Legal Analysis</h4>
+        <p>Review filings, evaluate strategy, identify procedural risks. Three models stress-test every argument.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128300;</div>
+        <h4>Research</h4>
+        <p>Validate hypotheses, challenge methodology, explore alternative explanations before you publish.</p>
+      </div>
+      <div class="feature">
+        <div class="fi">&#128187;</div>
+        <h4>Code Review</h4>
+        <p>Find bugs, security flaws, and architectural issues that a single model would miss.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ Final CTA ═══ -->
+  <section class="final">
+    <h2>Three minds.<br>One answer.</h2>
+    <p>Stop trusting a single AI. Start a discussion.</p>
+    <button class="hero-cta" onclick="window.location.href='dashboard.html'">Get Started</button>
+  </section>
+
+  <footer>
+    <span>Tribunal</span>
+    <span>Multi-model AI validation</span>
+  </footer>
+</body>
+</html>
