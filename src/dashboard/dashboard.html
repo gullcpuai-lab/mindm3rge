@@ -339,6 +339,107 @@
     .sep { height: 1px; background: var(--border); margin: 16px 0; }
     .hidden { display: none; }
 
+    /* ═══ View transitions ═══ */
+    .view { animation: viewIn 0.35s ease; }
+    @keyframes viewIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .view-out { animation: viewOut 0.2s ease forwards; }
+    @keyframes viewOut { to { opacity: 0; transform: translateY(-8px); } }
+
+    /* ═══ Skeleton loader ═══ */
+    .skel { border-radius: 12px; background: linear-gradient(90deg, rgba(255,255,255,0.02) 25%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.02) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .skel-turn { padding: 0; margin-bottom: 12px; border: 0.5px solid var(--border); border-radius: var(--r); overflow: hidden; }
+    .skel-turn .skel-bar { height: 48px; border-radius: 0; }
+    .skel-turn .skel-body { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .skel-turn .skel-line { height: 12px; border-radius: 6px; }
+    .skel-turn .skel-line.w60 { width: 60%; }
+    .skel-turn .skel-line.w80 { width: 80%; }
+    .skel-turn .skel-line.w45 { width: 45%; }
+
+    /* ═══ Pin/bookmark on turns ═══ */
+    .turn-actions { display: flex; gap: 4px; margin-left: auto; }
+    .turn-act {
+      width: 28px; height: 28px; border-radius: 8px; border: none;
+      background: transparent; color: var(--text3); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; font-size: 14px;
+    }
+    .turn-act:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
+    .turn-act.pinned { color: var(--orange); }
+    .turn-act.annotated { color: var(--accent); }
+
+    /* ═══ Annotations ═══ */
+    .annotation {
+      margin: 0 16px 12px; padding: 10px 14px; border-radius: 10px;
+      background: rgba(124,92,252,0.06); border: 0.5px solid rgba(124,92,252,0.15);
+      font-size: 12px; color: var(--text2); display: flex; align-items: flex-start; gap: 8px;
+    }
+    .annotation .ann-icon { color: var(--accent); font-size: 14px; flex-shrink: 0; margin-top: 1px; }
+    .annotation .ann-text { flex: 1; line-height: 1.5; }
+    .ann-input {
+      width: 100%; padding: 8px 12px; border-radius: 8px; font-size: 12px;
+      border: 0.5px solid var(--border); background: rgba(0,0,0,0.3); color: var(--text);
+      font-family: inherit; margin: 8px 16px 12px; box-sizing: border-box;
+      width: calc(100% - 32px);
+    }
+    .ann-input:focus { border-color: var(--accent); outline: none; }
+
+    /* ═══ Search bar ═══ */
+    .disc-search {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 14px; border-radius: 12px; margin-bottom: 16px;
+      background: var(--card); border: 0.5px solid var(--border);
+    }
+    .disc-search svg { color: var(--text3); flex-shrink: 0; }
+    .disc-search input {
+      flex: 1; border: none; background: none; color: var(--text);
+      font-size: 13px; font-family: inherit; outline: none;
+    }
+    .disc-search input::placeholder { color: var(--text3); }
+    .search-count { font-size: 10px; color: var(--text3); white-space: nowrap; }
+    .turn.search-hidden { display: none; }
+    .turn .search-highlight { background: rgba(124,92,252,0.25); border-radius: 2px; padding: 0 2px; }
+
+    /* ═══ Share modal ═══ */
+    .share-modal {
+      position: fixed; inset: 0; z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+      animation: viewIn 0.2s ease;
+    }
+    .share-box {
+      background: var(--bg3); border: 0.5px solid var(--border);
+      border-radius: 20px; padding: 28px; width: 420px; max-width: 90vw;
+      box-shadow: var(--shadow-lg);
+    }
+    .share-box h3 { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .share-box p { font-size: 13px; color: var(--text2); margin-bottom: 16px; line-height: 1.5; }
+    .share-url {
+      display: flex; gap: 8px; margin-bottom: 12px;
+    }
+    .share-url input {
+      flex: 1; padding: 10px 14px; border-radius: 10px; font-size: 12px;
+      border: 0.5px solid var(--border); background: rgba(0,0,0,0.3);
+      color: var(--text); font-family: inherit;
+    }
+    .share-url button {
+      padding: 10px 18px; border-radius: 10px; font-size: 12px; font-weight: 600;
+      background: var(--accent); color: #fff; border: none; cursor: pointer;
+      font-family: inherit;
+    }
+
+    /* ═══ History view ═══ */
+    .history-list { display: flex; flex-direction: column; gap: 10px; }
+    .history-item {
+      padding: 16px 20px; border-radius: 14px;
+      background: var(--card); border: 0.5px solid var(--border);
+      cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow);
+    }
+    .history-item:hover { border-color: var(--border-light); transform: translateY(-1px); }
+    .history-item .hi-prompt { font-size: 14px; font-weight: 500; margin-bottom: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .history-item .hi-meta { font-size: 11px; color: var(--text3); display: flex; gap: 12px; }
+    .history-empty { text-align: center; padding: 60px 20px; color: var(--text3); font-size: 14px; }
+
     /* Connection status (inline in model cards) */
     .mc-conn {
       display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 4px;
@@ -509,6 +610,16 @@
         <button class="cta" id="start-btn">Start Discussion</button>
       </div>
 
+      <!-- ── History View ── -->
+      <div id="history-section" class="hidden">
+        <div class="main-header">
+          <h1>Session History</h1>
+        </div>
+        <div class="history-list" id="history-list">
+          <div class="history-empty">No sessions yet. Start a discussion to see it here.</div>
+        </div>
+      </div>
+
       <!-- ── Discussion View ── -->
       <div id="discussion-section" class="hidden">
         <div class="main-header">
@@ -530,6 +641,19 @@
 
         <div class="disc-layout">
           <div class="disc-main">
+            <!-- Search -->
+            <div class="disc-search" id="disc-search">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input type="text" id="search-input" placeholder="Search discussion...">
+              <span class="search-count" id="search-count"></span>
+            </div>
+
+            <!-- Skeleton loader (shown while waiting for first response) -->
+            <div id="skeleton-loader" class="hidden">
+              <div class="skel-turn"><div class="skel-bar skel" style="height:48px"></div><div class="skel-body"><div class="skel-line w80 skel"></div><div class="skel-line w60 skel"></div><div class="skel-line w45 skel"></div></div></div>
+              <div class="skel-turn"><div class="skel-bar skel" style="height:48px"></div><div class="skel-body"><div class="skel-line w60 skel"></div><div class="skel-line w80 skel"></div></div></div>
+            </div>
+
             <div class="discussion" id="discussion-feed"></div>
             <div class="waiting hidden" id="waiting-indicator">
               <div class="d"><span></span><span></span><span></span></div>
@@ -543,12 +667,26 @@
               <button class="btn btn-primary" id="new-btn">New Session</button>
               <button class="btn" id="copy-btn">Copy Result</button>
               <button class="btn" id="export-btn">Export .md</button>
+              <button class="btn" id="share-btn">&#128279; Share</button>
             </div>
           </div>
           <div class="disc-sidebar">
             <div class="tl" id="timeline"></div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div class="share-modal hidden" id="share-modal">
+    <div class="share-box">
+      <h3>Share Discussion</h3>
+      <p>Copy the summary below or share the full discussion as a link.</p>
+      <div id="share-summary" style="max-height:200px;overflow-y:auto;padding:12px;border-radius:10px;background:rgba(0,0,0,0.3);font-size:12px;color:var(--text2);margin-bottom:16px;white-space:pre-wrap;line-height:1.6;border:0.5px solid var(--border);"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" id="share-copy" style="flex:1;">Copy Summary</button>
+        <button class="btn" id="share-close">Close</button>
       </div>
     </div>
   </div>

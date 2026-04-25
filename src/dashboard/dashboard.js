@@ -370,6 +370,9 @@ function updateUI(session) {
   document.getElementById('pass-total').textContent = session.passes;
   document.getElementById('turn-count').textContent = session.turns.length;
 
+  // Hide skeleton once we have turns
+  if (session.turns.length > 0) hideSkeleton();
+
   // Add new turns
   if (session.turns.length > lastTurnCount) {
     const feed = document.getElementById('discussion-feed');
@@ -482,15 +485,48 @@ function createTurnCard(turn) {
 
   const time = new Date(turn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
+  const turnId = `turn-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  card.id = turnId;
+  card.dataset.content = turn.content; // for search
+
   card.innerHTML = `
-    <div class="turn-header">
-      <span class="dot dot-${turn.model}" style="width:10px;height:10px;border-radius:50%;background:${MODEL_COLORS[turn.model]}"></span>
-      <span class="turn-model">${turn.modelName}</span>
-      <span class="turn-role">${roleLabels[turn.role] || turn.role}</span>
-      <span class="turn-time">Round ${turn.round} · ${time}</span>
+    <div class="turn-top">
+      <span style="width:8px;height:8px;border-radius:50%;background:${MODEL_COLORS[turn.model]}"></span>
+      <span class="turn-name">${turn.modelName}</span>
+      <span class="turn-badge">${roleLabels[turn.role] || turn.role}</span>
+      <span class="turn-meta">R${turn.round} · ${time}</span>
+      <div class="turn-actions">
+        <button class="turn-act pin-btn" title="Pin this response" data-turn="${turnId}">&#128204;</button>
+        <button class="turn-act ann-btn" title="Add annotation" data-turn="${turnId}">&#128221;</button>
+      </div>
     </div>
     <div class="turn-body">${escapeHtml(turn.content)}</div>
   `;
+
+  // Pin button
+  card.querySelector('.pin-btn').addEventListener('click', (e) => {
+    e.target.classList.toggle('pinned');
+  });
+
+  // Annotation button
+  card.querySelector('.ann-btn').addEventListener('click', (e) => {
+    const existing = card.querySelector('.ann-input');
+    if (existing) { existing.remove(); return; }
+    const input = document.createElement('input');
+    input.className = 'ann-input';
+    input.placeholder = 'Add a note about this response...';
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && input.value.trim()) {
+        const ann = document.createElement('div');
+        ann.className = 'annotation';
+        ann.innerHTML = `<span class="ann-icon">&#128221;</span><span class="ann-text">${escapeHtml(input.value)}</span>`;
+        input.replaceWith(ann);
+        e.target.classList.add('annotated');
+      }
+    });
+    card.appendChild(input);
+    input.focus();
+  });
 
   return card;
 }
@@ -523,7 +559,139 @@ chrome.runtime.onMessage.addListener((message) => {
 
   // Check connection status for each model
   checkConnections();
+  // Load history
+  loadHistory();
 })();
+
+// ═══ View transitions (8) ═══
+function switchView(showId) {
+  const views = ['setup-section', 'discussion-section', 'history-section'];
+  views.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id === showId) {
+      el.classList.remove('hidden');
+      el.classList.remove('view-out');
+      el.classList.add('view');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
+  // Update nav
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (showId === 'setup-section') document.getElementById('nav-setup')?.classList.add('active');
+  if (showId === 'discussion-section') document.getElementById('nav-discussion')?.classList.add('active');
+  if (showId === 'history-section') document.getElementById('nav-history')?.classList.add('active');
+}
+
+// Override nav clicks to use transitions
+document.getElementById('nav-setup')?.removeEventListener('click', () => {});
+document.getElementById('nav-setup')?.addEventListener('click', () => switchView('setup-section'));
+document.getElementById('nav-discussion')?.addEventListener('click', () => switchView('discussion-section'));
+document.getElementById('nav-history')?.addEventListener('click', () => { switchView('history-section'); loadHistory(); });
+
+// ═══ Skeleton loader (9) ═══
+function showSkeleton() {
+  document.getElementById('skeleton-loader')?.classList.remove('hidden');
+}
+function hideSkeleton() {
+  document.getElementById('skeleton-loader')?.classList.add('hidden');
+}
+
+// ═══ Search within discussion (11) ═══
+document.getElementById('search-input')?.addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase().trim();
+  const turns = document.querySelectorAll('.turn');
+  let matchCount = 0;
+
+  turns.forEach(turn => {
+    const content = turn.dataset.content || turn.textContent || '';
+    const body = turn.querySelector('.turn-body');
+
+    if (!query) {
+      turn.classList.remove('search-hidden');
+      if (body) body.innerHTML = escapeHtml(content.substring(0, 2000));
+      return;
+    }
+
+    if (content.toLowerCase().includes(query)) {
+      turn.classList.remove('search-hidden');
+      matchCount++;
+      // Highlight matches in body
+      if (body) {
+        const text = turn.dataset.content || '';
+        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        body.innerHTML = escapeHtml(text).replace(regex, '<span class="search-highlight">$1</span>');
+      }
+    } else {
+      turn.classList.add('search-hidden');
+    }
+  });
+
+  const countEl = document.getElementById('search-count');
+  if (countEl) countEl.textContent = query ? `${matchCount} found` : '';
+});
+
+// ═══ Share results (17) ═══
+document.getElementById('share-btn')?.addEventListener('click', async () => {
+  let summary = '';
+  try {
+    const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
+    if (status?.session) {
+      const s = status.session;
+      summary = `TRIBUNAL DISCUSSION SUMMARY\n\nPrompt: ${s.originalPrompt || s.prompt}\nModels: ${s.modelOrder?.map(m => MODEL_NAMES[m]).join(', ')}\nRounds: ${s.passes}\n\n`;
+      s.turns.forEach(t => {
+        summary += `--- ${t.modelName} (${t.role}, R${t.round}) ---\n${t.content}\n\n`;
+      });
+    }
+  } catch {
+    summary = 'Unable to generate summary — no active session.';
+  }
+
+  document.getElementById('share-summary').textContent = summary;
+  document.getElementById('share-modal').classList.remove('hidden');
+});
+
+document.getElementById('share-copy')?.addEventListener('click', () => {
+  const text = document.getElementById('share-summary').textContent;
+  navigator.clipboard.writeText(text);
+  document.getElementById('share-copy').textContent = 'Copied!';
+  setTimeout(() => { document.getElementById('share-copy').textContent = 'Copy Summary'; }, 2000);
+});
+
+document.getElementById('share-close')?.addEventListener('click', () => {
+  document.getElementById('share-modal').classList.add('hidden');
+});
+
+// ═══ Session history (1) ═══
+async function loadHistory() {
+  const list = document.getElementById('history-list');
+  if (!list) return;
+
+  try {
+    const result = await chrome.storage?.local?.get('sessionHistory');
+    const history = result?.sessionHistory || [];
+
+    if (history.length === 0) {
+      list.innerHTML = '<div class="history-empty">No sessions yet. Start a discussion to see it here.</div>';
+      return;
+    }
+
+    list.innerHTML = history.map(s => `
+      <div class="history-item" data-id="${s.id}">
+        <div class="hi-prompt">${escapeHtml((s.originalPrompt || s.prompt || '').substring(0, 200))}</div>
+        <div class="hi-meta">
+          <span>${s.modelOrder?.map(m => MODEL_NAMES[m] || m).join(', ') || 'Unknown'}</span>
+          <span>${s.turns?.length || 0} turns</span>
+          <span>${s.passes || 1} rounds</span>
+          <span>${new Date(s.savedAt || s.createdAt).toLocaleDateString()}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch {
+    list.innerHTML = '<div class="history-empty">Session history available when running as extension.</div>';
+  }
+}
 
 async function checkConnections() {
   const models = [
