@@ -263,7 +263,26 @@ document.getElementById('start-btn').addEventListener('click', async () => {
   }
 });
 
-// New session
+// Back to setup (keeps session data for editing)
+document.getElementById('back-btn')?.addEventListener('click', () => {
+  document.getElementById('setup-section').classList.remove('hidden');
+  document.getElementById('discussion-section').classList.add('hidden');
+  document.getElementById('start-btn').disabled = false;
+  document.getElementById('start-btn').textContent = 'Start Discussion';
+  stopPolling();
+});
+
+// Cancel session
+document.getElementById('cancel-btn')?.addEventListener('click', async () => {
+  await chrome.runtime.sendMessage({ type: 'CANCEL_SESSION' });
+  document.getElementById('setup-section').classList.remove('hidden');
+  document.getElementById('discussion-section').classList.add('hidden');
+  document.getElementById('start-btn').disabled = false;
+  document.getElementById('start-btn').textContent = 'Start Discussion';
+  stopPolling();
+});
+
+// New session (full reset)
 document.getElementById('new-btn')?.addEventListener('click', () => {
   document.getElementById('setup-section').classList.remove('hidden');
   document.getElementById('discussion-section').classList.add('hidden');
