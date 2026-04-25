@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleStartSession(data) {
-  const { prompt, starterModel, passes, fileContent } = data;
+  const { prompt, starterModel, passes, fileContent, files } = data;
 
   const fullPrompt = fileContent
     ? `${prompt}\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`
@@ -80,18 +80,20 @@ async function handleStartSession(data) {
     starterModel,
     passes,
     currentPass: 1,
-    currentStep: 'initial', // initial, critique, revision, synthesis
+    currentStep: 'initial',
     currentModel: starterModel,
     modelOrder: [starterModel, ...otherModels],
     turns: [],
+    files: files || [], // store files for uploading to each model
+    filesUploaded: {}, // track which models have received the files
     status: 'running',
     createdAt: new Date().toISOString(),
   };
 
   await saveSession(session);
 
-  // Open the starter model tab and inject the prompt
-  await sendToModel(starterModel, fullPrompt);
+  // Open the starter model tab and inject the prompt + files
+  await sendToModel(starterModel, fullPrompt, session.files);
 
   return { ok: true, sessionId: session.id };
 }
@@ -142,8 +144,8 @@ async function handleResponseCaptured(data, tab) {
   session.currentPass = nextAction.pass;
   await saveSession(session);
 
-  // Send the next prompt to the next model
-  await sendToModel(nextAction.model, nextAction.prompt);
+  // Send the next prompt to the next model (with files if first time)
+  await sendToModel(nextAction.model, nextAction.prompt, session.files);
 
   return { ok: true, nextModel: nextAction.model, nextStep: nextAction.step };
 }
@@ -232,7 +234,7 @@ function handleToggleTabs(visible) {
   }
 }
 
-async function sendToModel(model, prompt) {
+async function sendToModel(model, prompt, files) {
   const url = MODEL_URLS[model];
 
   // Find or create tab for this model
@@ -264,10 +266,20 @@ async function sendToModel(model, prompt) {
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  // Inject the prompt via content script
+  // Inject the prompt (and files on first message to each model) via content script
+  const session = await getSession();
+  let filesToSend = null;
+  if (files && files.length > 0 && session && !session.filesUploaded[model]) {
+    filesToSend = files;
+    // Mark files as uploaded for this model
+    session.filesUploaded[model] = true;
+    await saveSession(session);
+  }
+
   await chrome.tabs.sendMessage(tab.id, {
     type: 'INJECT_PROMPT',
     prompt,
+    files: filesToSend,
   });
 }
 

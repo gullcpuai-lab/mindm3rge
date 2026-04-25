@@ -5,11 +5,49 @@ let lastResponseText = '';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'INJECT_PROMPT') {
-    injectPrompt(message.prompt);
-    sendResponse({ ok: true });
+    if (message.files && message.files.length > 0) {
+      uploadFilesThenPrompt(message.files, message.prompt).then(() => sendResponse({ ok: true }));
+    } else {
+      injectPrompt(message.prompt);
+      sendResponse({ ok: true });
+    }
   }
   return true;
 });
+
+async function uploadFilesThenPrompt(files, prompt) {
+  // Gemini uses a + button or file upload area
+  const attachBtn = document.querySelector('button[aria-label="Upload file"]')
+    || document.querySelector('uploader button')
+    || document.querySelector('.upload-button');
+
+  let fileInput = document.querySelector('input[type="file"]');
+  if (!fileInput && attachBtn) {
+    attachBtn.click();
+    await new Promise(r => setTimeout(r, 500));
+    fileInput = document.querySelector('input[type="file"]');
+  }
+
+  if (fileInput) {
+    const dt = new DataTransfer();
+    for (const f of files) {
+      const binary = atob(f.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const blob = new Blob([bytes], { type: f.mimeType || 'application/octet-stream' });
+      const file = new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' });
+      dt.items.add(file);
+    }
+    fileInput.files = dt.files;
+    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+    console.log('[Tribunal] Uploaded', files.length, 'files to Gemini');
+    await new Promise(r => setTimeout(r, 2000));
+  } else {
+    console.log('[Tribunal] No file input found on Gemini');
+  }
+
+  injectPrompt(prompt);
+}
 
 function injectPrompt(prompt) {
   const inputSelectors = [

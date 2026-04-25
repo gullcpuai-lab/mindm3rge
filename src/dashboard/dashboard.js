@@ -35,14 +35,28 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
     if (uploadedFiles.length >= 10) break;
     if (uploadedFiles.some(f => f.name === file.name)) continue; // skip duplicates
 
-    let content;
-    if (file.name.endsWith('.pdf')) {
-      content = `[PDF: ${file.name} — ${(file.size / 1024).toFixed(0)} KB — PDF text extraction not available in extension. Content will be summarized by the model if possible.]`;
-    } else {
-      content = await file.text();
+    // Read as base64 for native file upload to each LLM
+    const base64 = await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]); // strip data: prefix
+      reader.readAsDataURL(file);
+    });
+
+    // Also read as text for fallback context injection
+    let textContent = '';
+    try {
+      textContent = await file.text();
+    } catch {
+      textContent = `[Binary file: ${file.name}]`;
     }
 
-    uploadedFiles.push({ name: file.name, size: file.size, content });
+    uploadedFiles.push({
+      name: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      base64,
+      content: textContent,
+    });
   }
 
   renderFileList();
@@ -110,7 +124,8 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         prompt,
         starterModel: selectedModel,
         passes: selectedPasses,
-        fileContent: buildFileContext(),
+        fileContent: buildFileContext(), // text fallback
+        files: uploadedFiles.map(f => ({ name: f.name, base64: f.base64, mimeType: f.mimeType })),
         hideTabs: true,
       },
     });
