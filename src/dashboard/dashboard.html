@@ -670,8 +670,13 @@
 
         <!-- Prompt + Directives + Files -->
         <div class="card">
-          <div class="card-title">Prompt <span class="info" data-tip="Your question or task. Sent to the starting model first, then others critique the response.">i</span></div>
-          <textarea class="prompt-box" id="prompt-input" placeholder="What do you want the models to analyze, debate, or validate?"></textarea>
+          <div class="card-title">Prompt <span class="info" data-tip="Your content — the document, question, or material you want analyzed.">i</span></div>
+          <textarea class="prompt-box" id="prompt-input" placeholder="Paste your document, question, or material here..."></textarea>
+
+          <div class="sep"></div>
+
+          <div class="card-title">Discussion Goal <span class="info" data-tip="Tell the models what they're working toward together. Instead of just critiquing, give them a collaborative mission — like 'make this complaint not demurrable' or 'find every factual weakness and fix it.'">i</span></div>
+          <textarea class="prompt-box" id="goal-input" placeholder="e.g., Work together to make this complaint not subject to anti-SLAPP or demurrer. Identify every weakness and propose specific fixes." style="min-height: 70px; font-size: 13px;"></textarea>
 
           <div class="sep"></div>
 

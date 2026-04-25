@@ -259,6 +259,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         passes: selectedPasses,
         models: [...participatingModels],
         modelRoles: getModelRoles(),
+        goal: document.getElementById('goal-input')?.value?.trim() || '',
         fileContent: buildFileContext(),
         files: uploadedFiles.map(f => ({ name: f.name, base64: f.base64, mimeType: f.mimeType })),
         directives: getSelectedDirectives(),

@@ -5,6 +5,12 @@ export function buildCritiquePrompt(originalPrompt, previousModelName, previousR
     ? `\n\nFOCUS YOUR CRITIQUE ON THESE SPECIFIC AREAS:\n${directives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n`
     : '';
 
+  // Extract goal from the prompt if present
+  const goalMatch = originalPrompt.match(/--- DISCUSSION GOAL ---\n([\s\S]*?)\n--- END GOAL ---/);
+  const goalBlock = goalMatch
+    ? `\n\nDISCUSSION GOAL: ${goalMatch[1].trim()}\nYou must work toward this goal. Don't just critique — actively propose specific improvements and fixes.\n`
+    : '';
+
   return `You are participating in a multi-model validation process (Round ${roundNumber}/${totalRounds}).
 
 ORIGINAL USER PROMPT:
@@ -12,7 +18,7 @@ ${originalPrompt}
 
 ${previousModelName.toUpperCase()}'S RESPONSE:
 ${previousResponse}
-${directiveBlock}
+${goalBlock}${directiveBlock}
 Please provide a thorough, structured critique of the above response:
 
 1. **STRENGTHS**: What is correct, well-reasoned, or valuable in this response?

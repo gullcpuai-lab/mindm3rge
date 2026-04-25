@@ -68,11 +68,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function handleStartSession(data) {
-  const { prompt, starterModel, passes, models, fileContent, files, directives } = data;
+  const { prompt, starterModel, passes, models, goal, fileContent, files, directives } = data;
 
-  const fullPrompt = fileContent
-    ? `${prompt}\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`
-    : prompt;
+  let fullPrompt = prompt;
+  if (goal) {
+    fullPrompt = `${prompt}\n\n--- DISCUSSION GOAL ---\n${goal}\n--- END GOAL ---\nIMPORTANT: The models should work collaboratively toward the above goal. Don't just critique — actively improve and fix issues to achieve this goal.`;
+  }
+  if (fileContent) {
+    fullPrompt += `\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`;
+  }
 
   // Determine model order from selected participants
   const allModels = models || ['claude', 'chatgpt', 'gemini'];
@@ -91,6 +95,7 @@ async function handleStartSession(data) {
     turns: [],
     files: files || [],
     filesUploaded: {},
+    goal: goal || '',
     directives: directives || [],
     status: 'running',
     createdAt: new Date().toISOString(),
