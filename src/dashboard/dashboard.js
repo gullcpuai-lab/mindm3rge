@@ -27,11 +27,25 @@ const DIRECTIVE_LABELS = {
   'security-analysis': 'Analyze security implications, attack vectors, and vulnerabilities',
 };
 
+// Sidebar navigation
+document.getElementById('nav-setup')?.addEventListener('click', () => {
+  document.getElementById('setup-section').classList.remove('hidden');
+  document.getElementById('discussion-section').classList.add('hidden');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('nav-setup').classList.add('active');
+});
+document.getElementById('nav-discussion')?.addEventListener('click', () => {
+  document.getElementById('setup-section').classList.add('hidden');
+  document.getElementById('discussion-section').classList.remove('hidden');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('nav-discussion').classList.add('active');
+});
+
 // Model participation toggles
 document.querySelectorAll('.model-toggle').forEach(toggle => {
   toggle.addEventListener('change', (e) => {
     const model = e.target.dataset.model;
-    const label = e.target.closest('.model');
+    const label = e.target.closest('.model-card');
     if (e.target.checked) {
       participatingModels.add(model);
       label.classList.add('on');
@@ -70,9 +84,9 @@ document.querySelectorAll('.starter-chip').forEach(btn => {
 });
 
 // Pass selection
-document.querySelectorAll('.pass').forEach(btn => {
+document.querySelectorAll('.pass-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.pass').forEach(b => b.classList.remove('on'));
+    document.querySelectorAll('.pass-btn').forEach(b => b.classList.remove('on'));
     btn.classList.add('on');
     selectedPasses = parseInt(btn.dataset.passes);
     document.getElementById('custom-passes').value = '';
@@ -84,7 +98,7 @@ document.querySelectorAll('.pass').forEach(btn => {
 document.getElementById('custom-passes').addEventListener('input', (e) => {
   const val = parseInt(e.target.value);
   if (val > 0) {
-    document.querySelectorAll('.pass').forEach(b => b.classList.remove('on'));
+    document.querySelectorAll('.pass-btn').forEach(b => b.classList.remove('on'));
     selectedPasses = val;
     e.target.style.borderColor = '#7c3aed';
   } else {
@@ -316,11 +330,11 @@ document.getElementById('export-btn')?.addEventListener('click', async () => {
 
   const s = status.session;
   let md = `# Tribunal Discussion\n\n**Prompt:** ${s.originalPrompt || s.prompt}\n\n`;
-  md += `**Models:** ${s.modelOrder.map(m => MODEL_NAMES[m]).join(', ')}\n`;
-  md += `**Passes:** ${s.passes}\n\n---\n\n`;
+  md += `**Models:** ${s.model-cardOrder.map(m => MODEL_NAMES[m]).join(', ')}\n`;
+  md += `**Passes:** ${s.pass-btnes}\n\n---\n\n`;
 
   for (const t of s.turns) {
-    md += `## ${t.modelName} — ${t.role} (Round ${t.round})\n\n${t.content}\n\n---\n\n`;
+    md += `## ${t.model-cardName} — ${t.role} (Round ${t.round})\n\n${t.content}\n\n---\n\n`;
   }
 
   const blob = new Blob([md], { type: 'text/markdown' });
@@ -349,11 +363,11 @@ function stopPolling() {
 
 function updateUI(session) {
   // Progress
-  const totalTurns = session.passes * 3; // rough estimate
+  const totalTurns = session.pass-btnes * 3; // rough estimate
   const progress = Math.min(100, (session.turns.length / totalTurns) * 100);
   document.getElementById('progress-fill').style.width = progress + '%';
   document.getElementById('pass-current').textContent = session.currentPass;
-  document.getElementById('pass-total').textContent = session.passes;
+  document.getElementById('pass-total').textContent = session.pass-btnes;
   document.getElementById('turn-count').textContent = session.turns.length;
 
   // Add new turns
@@ -411,11 +425,11 @@ function updateTimeline(session) {
 
   // Build expected steps based on session config
   const steps = [];
-  const models = session.modelOrder || ['claude', 'chatgpt', 'gemini'];
+  const models = session.model-cardOrder || ['claude', 'chatgpt', 'gemini'];
   const starter = models[0];
   const others = models.slice(1);
 
-  for (let pass = 1; pass <= session.passes; pass++) {
+  for (let pass = 1; pass <= session.pass-btnes; pass++) {
     if (pass === 1) {
       steps.push({ model: starter, role: 'initial', round: 1, label: MODEL_NAMES[starter], sub: 'Initial Response' });
     } else {
@@ -425,7 +439,7 @@ function updateTimeline(session) {
       steps.push({ model: m, role: 'critique', round: pass, label: MODEL_NAMES[m], sub: `Critique (R${pass})` });
     }
   }
-  steps.push({ model: others[0] || starter, role: 'synthesis', round: session.passes, label: 'Synthesis', sub: 'Final Answer' });
+  steps.push({ model: others[0] || starter, role: 'synthesis', round: session.pass-btnes, label: 'Synthesis', sub: 'Final Answer' });
 
   // Determine which steps are done, active, pending
   const doneTurns = session.turns.length;
@@ -443,7 +457,7 @@ function updateTimeline(session) {
     return `
       <div class="tl-item ${state}">
         <div class="tl-track">
-          <div class="tl-dot ${step.model} ${state}"></div>
+          <div class="tl-dot ${step.model-card} ${state}"></div>
           ${!isLast ? `<div class="tl-line ${isDone ? 'done' : ''}"></div>` : ''}
         </div>
         <div class="tl-content">
@@ -457,7 +471,7 @@ function updateTimeline(session) {
 
 function createTurnCard(turn) {
   const card = document.createElement('div');
-  card.className = `turn ${turn.model}`;
+  card.className = `turn ${turn.model-card}`;
 
   const roleLabels = {
     initial: 'Initial Response',
@@ -470,8 +484,8 @@ function createTurnCard(turn) {
 
   card.innerHTML = `
     <div class="turn-header">
-      <span class="dot dot-${turn.model}" style="width:10px;height:10px;border-radius:50%;background:${MODEL_COLORS[turn.model]}"></span>
-      <span class="turn-model">${turn.modelName}</span>
+      <span class="dot dot-${turn.model-card}" style="width:10px;height:10px;border-radius:50%;background:${MODEL_COLORS[turn.model-card]}"></span>
+      <span class="turn-model">${turn.model-cardName}</span>
       <span class="turn-role">${roleLabels[turn.role] || turn.role}</span>
       <span class="turn-time">Round ${turn.round} · ${time}</span>
     </div>
