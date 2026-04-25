@@ -350,12 +350,15 @@ function updateUI(session) {
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   }
 
+  // Update timeline
+  updateTimeline(session);
+
   // Waiting indicator
   const waiting = document.getElementById('waiting-indicator');
   if (session.status === 'running') {
     waiting.classList.remove('hidden');
     const modelName = MODEL_NAMES[session.currentModel] || session.currentModel;
-    document.getElementById('waiting-text').textContent = `Waiting for ${modelName} to respond...`;
+    document.getElementById('waiting-text').textContent = `Waiting for ${modelName}...`;
   } else {
     waiting.classList.add('hidden');
   }
@@ -376,9 +379,66 @@ function updateUI(session) {
   }
 }
 
+function updateTimeline(session) {
+  const tl = document.getElementById('timeline');
+  if (!tl) return;
+
+  const roleLabels = {
+    initial: 'Initial Response',
+    critique: 'Critique',
+    revision: 'Revision',
+    synthesis: 'Synthesis',
+  };
+
+  // Build expected steps based on session config
+  const steps = [];
+  const models = session.modelOrder || ['claude', 'chatgpt', 'gemini'];
+  const starter = models[0];
+  const others = models.slice(1);
+
+  for (let pass = 1; pass <= session.passes; pass++) {
+    if (pass === 1) {
+      steps.push({ model: starter, role: 'initial', round: 1, label: MODEL_NAMES[starter], sub: 'Initial Response' });
+    } else {
+      steps.push({ model: starter, role: 'revision', round: pass, label: MODEL_NAMES[starter], sub: `Revision (R${pass})` });
+    }
+    for (const m of others) {
+      steps.push({ model: m, role: 'critique', round: pass, label: MODEL_NAMES[m], sub: `Critique (R${pass})` });
+    }
+  }
+  steps.push({ model: others[0] || starter, role: 'synthesis', round: session.passes, label: 'Synthesis', sub: 'Final Answer' });
+
+  // Determine which steps are done, active, pending
+  const doneTurns = session.turns.length;
+
+  tl.innerHTML = '<div class="tl-title">Progress</div>' + steps.map((step, i) => {
+    const isDone = i < doneTurns;
+    const isActive = i === doneTurns && session.status === 'running';
+    const isPending = i > doneTurns;
+    const state = isDone ? 'done' : isActive ? 'active' : 'pending';
+    const isLast = i === steps.length - 1;
+
+    const actualTurn = session.turns[i];
+    const time = actualTurn ? new Date(actualTurn.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
+    return `
+      <div class="tl-item ${state}">
+        <div class="tl-track">
+          <div class="tl-dot ${step.model} ${state}"></div>
+          ${!isLast ? `<div class="tl-line ${isDone ? 'done' : ''}"></div>` : ''}
+        </div>
+        <div class="tl-content">
+          <div class="tl-label">${step.label}</div>
+          <div class="tl-sub">${isActive ? 'Thinking...' : isDone ? (time || step.sub) : step.sub}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 function createTurnCard(turn) {
   const card = document.createElement('div');
-  card.className = `turn-card ${turn.model}`;
+  card.className = `turn ${turn.model}`;
 
   const roleLabels = {
     initial: 'Initial Response',

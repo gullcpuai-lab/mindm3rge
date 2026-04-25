@@ -249,6 +249,59 @@
     .waiting .d span:nth-child(3) { animation-delay: 0.3s; }
     @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-5px); } }
 
+    /* ══ Two-column discussion layout ══ */
+    .disc-layout { display: flex; gap: 24px; align-items: flex-start; }
+    .disc-main { flex: 1; min-width: 0; }
+    .disc-timeline {
+      width: 200px; flex-shrink: 0; position: sticky; top: 60px;
+      max-height: calc(100vh - 80px); overflow-y: auto;
+    }
+
+    /* ══ Timeline ══ */
+    .tl { padding: 4px 0; }
+    .tl-title { font-size: 10px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .tl-item {
+      display: flex; gap: 10px; position: relative; padding-bottom: 16px;
+    }
+    .tl-item:last-child { padding-bottom: 0; }
+    .tl-track { display: flex; flex-direction: column; align-items: center; width: 16px; flex-shrink: 0; }
+    .tl-dot {
+      width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid var(--text3); background: transparent; z-index: 1;
+      transition: all 0.3s;
+    }
+    .tl-dot.done { background: var(--accent); border-color: var(--accent); }
+    .tl-dot.active { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent-glow); animation: pulse 1.5s infinite; }
+    .tl-dot.pending { border-color: rgba(255,255,255,0.1); }
+    .tl-dot.claude { border-color: var(--orange); }
+    .tl-dot.claude.done, .tl-dot.claude.active { background: var(--orange); border-color: var(--orange); box-shadow: 0 0 8px rgba(255,159,10,0.3); }
+    .tl-dot.chatgpt { border-color: var(--green); }
+    .tl-dot.chatgpt.done, .tl-dot.chatgpt.active { background: var(--green); border-color: var(--green); box-shadow: 0 0 8px rgba(48,209,88,0.3); }
+    .tl-dot.gemini { border-color: var(--blue); }
+    .tl-dot.gemini.done, .tl-dot.gemini.active { background: var(--blue); border-color: var(--blue); box-shadow: 0 0 8px rgba(10,132,255,0.3); }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .tl-line {
+      width: 1.5px; flex: 1; background: rgba(255,255,255,0.06); margin: 3px 0;
+    }
+    .tl-line.done { background: var(--accent); }
+    .tl-content { padding-top: 0; }
+    .tl-label { font-size: 11px; font-weight: 600; color: var(--text2); line-height: 1.2; }
+    .tl-item.done .tl-label { color: var(--text); }
+    .tl-item.active .tl-label { color: var(--text); }
+    .tl-item.pending .tl-label { color: var(--text3); }
+    .tl-sub { font-size: 9px; color: var(--text3); margin-top: 2px; }
+    .tl-item.active .tl-sub { color: var(--accent); }
+
+    @media (max-width: 768px) {
+      .disc-layout { flex-direction: column-reverse; }
+      .disc-timeline { width: 100%; position: static; max-height: none; }
+      .tl { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 12px; }
+      .tl-item { flex-direction: column; align-items: center; padding-bottom: 0; min-width: 60px; }
+      .tl-track { flex-direction: row; width: auto; }
+      .tl-line { width: auto; height: 1.5px; flex: 1; margin: 0 3px; min-width: 20px; }
+      .tl-content { text-align: center; }
+    }
+
     .actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
     .btn {
       padding: 8px 16px; border-radius: 10px; font-size: 12px; font-weight: 500;
@@ -384,25 +437,36 @@
     </div>
 
     <!-- ── Discussion ── -->
-    <div id="discussion-section" class="hidden">
+    <div id="discussion-section" class="hidden" style="max-width: 960px;">
       <div class="prog-label">
         <span>Round <span id="pass-current">1</span> / <span id="pass-total">1</span></span>
         <span><span id="turn-count">0</span> turns</span>
       </div>
       <div class="prog-bar"><div class="prog-fill" id="progress-fill" style="width:0%"></div></div>
-      <div class="discussion" id="discussion-feed"></div>
-      <div class="waiting hidden" id="waiting-indicator">
-        <div class="d"><span></span><span></span><span></span></div>
-        <span id="waiting-text">Waiting for Claude...</span>
-      </div>
-      <div class="synth hidden" id="synthesis-card">
-        <h3>&#10024; Final Synthesis</h3>
-        <div id="synthesis-content" style="font-size:14px;line-height:1.7;color:var(--text2);white-space:pre-wrap;"></div>
-      </div>
-      <div class="actions" id="action-buttons" style="display:none;">
-        <button class="btn btn-primary" id="new-btn">New Session</button>
-        <button class="btn" id="copy-btn">Copy Result</button>
-        <button class="btn" id="export-btn">Export .md</button>
+
+      <div class="disc-layout">
+        <!-- Main feed -->
+        <div class="disc-main">
+          <div class="discussion" id="discussion-feed"></div>
+          <div class="waiting hidden" id="waiting-indicator">
+            <div class="d"><span></span><span></span><span></span></div>
+            <span id="waiting-text">Waiting for Claude...</span>
+          </div>
+          <div class="synth hidden" id="synthesis-card">
+            <h3>&#10024; Final Synthesis</h3>
+            <div id="synthesis-content" style="font-size:14px;line-height:1.7;color:var(--text2);white-space:pre-wrap;"></div>
+          </div>
+          <div class="actions" id="action-buttons" style="display:none;">
+            <button class="btn btn-primary" id="new-btn">New Session</button>
+            <button class="btn" id="copy-btn">Copy Result</button>
+            <button class="btn" id="export-btn">Export .md</button>
+          </div>
+        </div>
+
+        <!-- Timeline sidebar -->
+        <div class="disc-timeline">
+          <div class="tl" id="timeline"></div>
+        </div>
       </div>
     </div>
   </div>
