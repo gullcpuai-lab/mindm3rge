@@ -4,493 +4,485 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tribunal — AI Multi-Model Validator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #09090b;
-      color: #fafafa;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #08080a;
+      color: #e4e4e7;
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* Header */
+    /* ─── Header ─── */
     .header {
-      padding: 20px 32px;
-      border-bottom: 1px solid #27272a;
+      padding: 16px 28px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      backdrop-filter: blur(12px);
       position: sticky;
       top: 0;
       z-index: 10;
-      background: rgba(9,9,11,0.85);
+      background: rgba(8,8,10,0.8);
+      backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
-    .logo span { color: #7c3aed; }
-    .header-right { display: flex; gap: 10px; align-items: center; }
-
-    /* Layout */
-    .container { max-width: 900px; margin: 0 auto; padding: 24px 20px 100px; }
-
-    /* Prompt section */
-    .prompt-section {
-      background: #18181b;
-      border: 1px solid #27272a;
-      border-radius: 16px;
-      padding: 24px;
-      margin-bottom: 24px;
+    .logo {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #a78bfa, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
     }
-    .prompt-section h2 { font-size: 13px; color: #71717a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+    .header-right { display: flex; gap: 8px; align-items: center; }
 
-    .model-row { display: flex; gap: 10px; margin-bottom: 16px; }
-    .model-chip {
-      flex: 1;
-      padding: 12px;
-      border: 1px solid #27272a;
-      border-radius: 12px;
-      background: #18181b;
-      color: #a1a1aa;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      text-align: center;
-      transition: all 0.15s;
+    /* ─── Layout ─── */
+    .container { max-width: 860px; margin: 0 auto; padding: 28px 20px 100px; }
+
+    /* ─── Cards ─── */
+    .card {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      padding: 28px;
+      margin-bottom: 20px;
+      backdrop-filter: blur(10px);
     }
-    .model-chip:hover { border-color: #3f3f46; }
-    .model-chip.selected { border-color: #7c3aed; background: rgba(124,58,237,0.1); color: #c4b5fd; }
-    .model-chip .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
-    .dot-claude { background: #f59e0b; }
-    .dot-chatgpt { background: #10b981; }
-    .dot-gemini { background: #3b82f6; }
 
-    .pass-row { display: flex; gap: 8px; margin-bottom: 16px; }
-    .pass-chip {
-      padding: 8px 16px;
-      border: 1px solid #27272a;
-      border-radius: 8px;
-      background: transparent;
+    .section-label {
+      font-size: 10px;
+      font-weight: 600;
       color: #71717a;
-      font-size: 12px;
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .pass-chip.selected { border-color: #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.08); }
-
-    textarea {
-      width: 100%;
-      min-height: 120px;
-      padding: 14px 16px;
-      border: 1px solid #27272a;
-      border-radius: 12px;
-      background: #09090b;
-      color: #fafafa;
-      font-size: 14px;
-      font-family: inherit;
-      resize: vertical;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
       margin-bottom: 12px;
     }
-    textarea:focus { border-color: #7c3aed; outline: none; }
-    textarea::placeholder { color: #52525b; }
+    .section-hint {
+      font-size: 11px;
+      color: #3f3f46;
+      margin-bottom: 10px;
+    }
 
-    .file-section { margin-bottom: 16px; }
-    .file-label {
+    /* ─── Model Cards ─── */
+    .model-grid { display: flex; gap: 10px; margin-bottom: 20px; }
+    .model-card {
+      flex: 1;
+      padding: 14px 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.02);
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    .model-card:hover { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.1); }
+    .model-card.selected { border-color: rgba(124,58,237,0.5); background: rgba(124,58,237,0.06); }
+    .model-card .icon { font-size: 20px; margin-bottom: 4px; display: block; }
+    .model-card .name { font-size: 12px; font-weight: 600; color: #a1a1aa; }
+    .model-card.selected .name { color: #c4b5fd; }
+    .model-card .check {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 16px;
+      height: 16px;
+      border-radius: 4px;
+      border: 1.5px solid rgba(255,255,255,0.15);
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 10px 14px;
-      border: 1px dashed #27272a;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 12px;
-      color: #71717a;
+      justify-content: center;
+      font-size: 10px;
       transition: all 0.15s;
     }
-    .file-label:hover { border-color: #3f3f46; color: #a1a1aa; }
-    .file-label input { display: none; }
-    .file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .model-card.selected .check { background: #7c3aed; border-color: #7c3aed; }
+    .model-card input[type="checkbox"] { display: none; }
+
+    .starter-grid { display: flex; gap: 8px; margin-bottom: 4px; }
+    .starter-btn {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      background: transparent;
+      color: #52525b;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .starter-btn:hover { color: #a1a1aa; }
+    .starter-btn.selected { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: rgba(124,58,237,0.05); }
+
+    /* ─── Pass Chips ─── */
+    .pass-grid { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
+    .pass-btn {
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      background: transparent;
+      color: #52525b;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .pass-btn:hover { color: #a1a1aa; }
+    .pass-btn.selected { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: rgba(124,58,237,0.05); }
+    .pass-custom {
+      width: 56px;
+      padding: 8px 6px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+      background: transparent;
+      color: #e4e4e7;
+      font-size: 12px;
+      text-align: center;
+      font-family: inherit;
+    }
+    .pass-custom:focus { border-color: rgba(124,58,237,0.5); outline: none; }
+
+    /* ─── Textarea ─── */
+    textarea {
+      width: 100%;
+      min-height: 130px;
+      padding: 16px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 14px;
+      background: rgba(0,0,0,0.3);
+      color: #e4e4e7;
+      font-size: 14px;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: vertical;
+      margin-bottom: 4px;
+    }
+    textarea:focus { border-color: rgba(124,58,237,0.4); outline: none; }
+    textarea::placeholder { color: #3f3f46; }
+
+    /* ─── Directives ─── */
+    .directive-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    .dir-chip {
+      padding: 6px 14px;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #52525b;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: transparent;
+      font-family: inherit;
+    }
+    .dir-chip:hover { color: #a1a1aa; border-color: rgba(255,255,255,0.12); }
+    .dir-chip.selected { border-color: rgba(124,58,237,0.4); color: #c4b5fd; background: rgba(124,58,237,0.06); }
+
+    .custom-directives { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+    .custom-directive-row { display: flex; gap: 6px; align-items: center; }
+    .custom-directive-row input {
+      flex: 1;
+      padding: 8px 14px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: rgba(0,0,0,0.3);
+      color: #e4e4e7;
+      font-size: 12px;
+      font-family: inherit;
+    }
+    .custom-directive-row input:focus { border-color: rgba(124,58,237,0.4); outline: none; }
+    .custom-directive-row button { background: none; border: none; color: #3f3f46; cursor: pointer; font-size: 16px; padding: 4px; }
+    .custom-directive-row button:hover { color: #ef4444; }
+    .add-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 12px;
+      border: 1px dashed rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: transparent;
+      color: #3f3f46;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .add-btn:hover { border-color: rgba(255,255,255,0.15); color: #71717a; }
+
+    /* ─── Files ─── */
+    .file-zone {
+      padding: 12px 16px;
+      border: 1px dashed rgba(255,255,255,0.08);
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 12px;
+      color: #3f3f46;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .file-zone:hover { border-color: rgba(255,255,255,0.15); color: #71717a; }
+    .file-zone input { display: none; }
+    .file-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 4px; }
     .file-item {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      padding: 6px 10px;
-      background: #1c1c1f;
-      border: 1px solid #27272a;
-      border-radius: 6px;
+      padding: 8px 12px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 10px;
       font-size: 11px;
       color: #a1a1aa;
     }
     .file-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .file-item .size { color: #52525b; margin: 0 8px; white-space: nowrap; }
-    .file-item .remove {
-      background: none; border: none; color: #52525b; cursor: pointer; font-size: 14px; padding: 0 4px;
-    }
+    .file-item .size { color: #3f3f46; margin: 0 10px; white-space: nowrap; font-size: 10px; }
+    .file-item .remove { background: none; border: none; color: #3f3f46; cursor: pointer; font-size: 14px; }
     .file-item .remove:hover { color: #ef4444; }
-    .file-count { font-size: 10px; color: #52525b; margin-top: 4px; }
+    .file-count { font-size: 10px; color: #3f3f46; margin-bottom: 8px; }
 
+    /* ─── CTA Button ─── */
     .btn-start {
       width: 100%;
-      padding: 14px;
+      padding: 16px;
       border: none;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      border-radius: 14px;
+      background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 50%, #5b21b6 100%);
       color: white;
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      letter-spacing: -0.2px;
+      margin-top: 8px;
+    }
+    .btn-start:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(124,58,237,0.25); }
+    .btn-start:active { transform: translateY(0); }
+    .btn-start:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* ─── Utility Buttons ─── */
+    .btn {
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
       transition: all 0.15s;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: rgba(255,255,255,0.03);
+      color: #a1a1aa;
+      font-family: inherit;
     }
-    .btn-start:hover { transform: translateY(-1px); box-shadow: 0 4px 20px rgba(124,58,237,0.3); }
-    .btn-start:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.1); }
+    .btn-primary { background: #7c3aed; border-color: #7c3aed; color: white; }
+    .btn-primary:hover { background: #6d28d9; }
+    .toggle-tabs {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 14px; border-radius: 10px; font-size: 12px; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03);
+      color: #52525b; transition: all 0.15s; font-family: inherit;
+    }
+    .toggle-tabs:hover { color: #a1a1aa; }
+    .toggle-tabs.active { border-color: #f59e0b; color: #f59e0b; }
 
-    /* Progress */
-    .progress-bar {
-      background: #27272a;
-      border-radius: 4px;
-      height: 6px;
-      margin-bottom: 20px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #7c3aed, #a78bfa);
-      border-radius: 4px;
-      transition: width 0.5s ease;
-    }
-    .progress-label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 11px;
-      color: #71717a;
-      margin-bottom: 6px;
-    }
+    /* ─── Progress ─── */
+    .progress-bar { background: rgba(255,255,255,0.04); border-radius: 6px; height: 4px; margin-bottom: 24px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #7c3aed, #a78bfa); border-radius: 6px; transition: width 0.5s ease; }
+    .progress-label { display: flex; justify-content: space-between; font-size: 11px; color: #3f3f46; margin-bottom: 6px; font-weight: 500; }
 
-    /* Discussion feed */
-    .discussion { display: flex; flex-direction: column; gap: 16px; }
-
+    /* ─── Turn Cards ─── */
+    .discussion { display: flex; flex-direction: column; gap: 14px; }
     .turn-card {
-      background: #18181b;
-      border: 1px solid #27272a;
-      border-radius: 14px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
       overflow: hidden;
       animation: slideIn 0.3s ease;
     }
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .turn-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 14px 18px;
-      border-bottom: 1px solid #27272a;
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 18px;
+      background: rgba(255,255,255,0.01);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
     }
     .turn-model { font-weight: 600; font-size: 13px; }
-    .turn-role {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: rgba(124,58,237,0.1);
-      color: #a78bfa;
-    }
-    .turn-time { font-size: 10px; color: #52525b; margin-left: auto; }
-    .turn-body {
-      padding: 16px 18px;
-      font-size: 14px;
-      line-height: 1.7;
-      color: #d4d4d8;
-      white-space: pre-wrap;
-    }
+    .turn-role { font-size: 9px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: rgba(124,58,237,0.1); color: #a78bfa; }
+    .turn-time { font-size: 10px; color: #3f3f46; margin-left: auto; }
+    .turn-body { padding: 16px 18px; font-size: 13.5px; line-height: 1.75; color: #a1a1aa; white-space: pre-wrap; }
 
     .turn-card.claude .turn-header { border-left: 3px solid #f59e0b; }
     .turn-card.chatgpt .turn-header { border-left: 3px solid #10b981; }
     .turn-card.gemini .turn-header { border-left: 3px solid #3b82f6; }
 
-    /* Synthesis card */
+    /* ─── Synthesis ─── */
     .synthesis-card {
-      background: linear-gradient(135deg, rgba(124,58,237,0.08), rgba(59,130,246,0.05));
-      border: 1px solid rgba(124,58,237,0.3);
-      border-radius: 14px;
-      padding: 20px;
-      margin-top: 8px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.06), rgba(59,130,246,0.03));
+      border: 1px solid rgba(124,58,237,0.2);
+      border-radius: 16px;
+      padding: 22px;
+      margin-top: 10px;
     }
-    .synthesis-card h3 {
-      font-size: 15px;
-      font-weight: 700;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    .synthesis-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
-    /* Action buttons */
-    .actions {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
-      flex-wrap: wrap;
-    }
-    .btn {
-      padding: 10px 18px;
-      border-radius: 10px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s;
-      border: 1px solid #27272a;
-      background: #18181b;
-      color: #d4d4d8;
-    }
-    .btn:hover { border-color: #3f3f46; background: #27272a; }
-    .btn-primary { background: #7c3aed; border-color: #7c3aed; color: white; }
-    .btn-primary:hover { background: #6d28d9; }
-
-    /* Toggle tabs */
-    .toggle-tabs {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 18px;
-      border-radius: 10px;
-      font-size: 13px;
-      cursor: pointer;
-      border: 1px solid #27272a;
-      background: #18181b;
-      color: #71717a;
-      transition: all 0.15s;
-    }
-    .toggle-tabs:hover { color: #d4d4d8; border-color: #3f3f46; }
-    .toggle-tabs.active { border-color: #f59e0b; color: #f59e0b; }
-
-    /* Directives */
-    .directives-section { margin-bottom: 16px; }
-    .directive-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-    .directive-chip {
-      padding: 6px 12px;
-      border: 1px solid #27272a;
-      border-radius: 8px;
-      font-size: 11px;
-      color: #a1a1aa;
-      cursor: pointer;
-      transition: all 0.15s;
-      background: transparent;
-    }
-    .directive-chip:hover { border-color: #3f3f46; color: #d4d4d8; }
-    .directive-chip.selected { border-color: #7c3aed; color: #c4b5fd; background: rgba(124,58,237,0.08); }
-    .custom-directives { display: flex; flex-direction: column; gap: 6px; }
-    .custom-directive-row {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-    }
-    .custom-directive-row input {
-      flex: 1;
-      padding: 8px 12px;
-      border: 1px solid #27272a;
-      border-radius: 8px;
-      background: #09090b;
-      color: #fafafa;
-      font-size: 12px;
-    }
-    .custom-directive-row input:focus { border-color: #7c3aed; outline: none; }
-    .custom-directive-row button {
-      padding: 6px 8px;
-      border: none;
-      background: none;
-      color: #52525b;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    .custom-directive-row button:hover { color: #ef4444; }
-    .add-directive-btn {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      padding: 6px 12px;
-      border: 1px dashed #27272a;
-      border-radius: 8px;
-      background: transparent;
-      color: #52525b;
-      font-size: 11px;
-      cursor: pointer;
-      transition: all 0.15s;
-      width: fit-content;
-    }
-    .add-directive-btn:hover { border-color: #3f3f46; color: #a1a1aa; }
-
-    /* Waiting indicator */
+    /* ─── Waiting ─── */
     .waiting {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 16px 18px;
-      background: #18181b;
-      border: 1px solid #27272a;
+      display: flex; align-items: center; gap: 10px;
+      padding: 14px 18px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.04);
       border-radius: 14px;
-      font-size: 13px;
-      color: #71717a;
+      font-size: 12px; color: #52525b; margin-top: 14px;
     }
-    .waiting .dots span {
-      display: inline-block;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #7c3aed;
-      animation: bounce 1s infinite;
-      margin-right: 3px;
-    }
+    .waiting .dots span { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: #7c3aed; animation: bounce 1s infinite; margin-right: 3px; }
     .waiting .dots span:nth-child(2) { animation-delay: 0.15s; }
     .waiting .dots span:nth-child(3) { animation-delay: 0.3s; }
-    @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); }
-      40% { transform: translateY(-8px); }
-    }
+    @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
 
+    .actions { display: flex; gap: 8px; margin-top: 20px; flex-wrap: wrap; }
     .hidden { display: none; }
 
-    /* Empty state */
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: #52525b;
-    }
-    .empty-state h2 { font-size: 20px; color: #a1a1aa; margin-bottom: 8px; }
-    .empty-state p { font-size: 14px; max-width: 400px; margin: 0 auto; }
+    /* ─── Divider ─── */
+    .divider { height: 1px; background: rgba(255,255,255,0.04); margin: 20px 0; }
   </style>
 </head>
 <body>
   <div class="header">
-    <div class="logo"><span>T</span>ribunal</div>
+    <div class="logo">Tribunal</div>
     <div class="header-right">
       <button class="toggle-tabs" id="toggle-tabs-btn" title="Show/hide LLM browser tabs">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-        Show LLM Tabs
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+        LLM Tabs
       </button>
       <button class="btn" id="history-btn">History</button>
     </div>
   </div>
 
   <div class="container">
-    <!-- New Session -->
+    <!-- ─── Setup ─── -->
     <div id="setup-section">
-      <div class="prompt-section">
-        <h2>Participating Models</h2>
-        <p style="font-size: 11px; color: #52525b; margin-bottom: 8px;">Select which models to include, then choose which one starts:</p>
-        <div class="model-row" style="margin-bottom: 8px;">
-          <label class="model-chip selected" data-model="claude" style="position: relative;">
-            <input type="checkbox" class="model-toggle" data-model="claude" checked style="position: absolute; top: 6px; right: 6px; accent-color: #7c3aed; width: 14px; height: 14px;">
-            <span class="dot dot-claude"></span>Claude
+      <!-- Models Card -->
+      <div class="card">
+        <div class="section-label">Participating Models</div>
+        <div class="section-hint">Check which models join the discussion</div>
+        <div class="model-grid">
+          <label class="model-card selected" data-model="claude">
+            <input type="checkbox" class="model-toggle" data-model="claude" checked>
+            <div class="check">&#10003;</div>
+            <span class="icon">&#x1F7E0;</span>
+            <span class="name">Claude</span>
           </label>
-          <label class="model-chip selected" data-model="chatgpt" style="position: relative;">
-            <input type="checkbox" class="model-toggle" data-model="chatgpt" checked style="position: absolute; top: 6px; right: 6px; accent-color: #7c3aed; width: 14px; height: 14px;">
-            <span class="dot dot-chatgpt"></span>ChatGPT
+          <label class="model-card selected" data-model="chatgpt">
+            <input type="checkbox" class="model-toggle" data-model="chatgpt" checked>
+            <div class="check">&#10003;</div>
+            <span class="icon">&#x1F7E2;</span>
+            <span class="name">ChatGPT</span>
           </label>
-          <label class="model-chip selected" data-model="gemini" style="position: relative;">
-            <input type="checkbox" class="model-toggle" data-model="gemini" checked style="position: absolute; top: 6px; right: 6px; accent-color: #7c3aed; width: 14px; height: 14px;">
-            <span class="dot dot-gemini"></span>Gemini
+          <label class="model-card selected" data-model="gemini">
+            <input type="checkbox" class="model-toggle" data-model="gemini" checked>
+            <div class="check">&#10003;</div>
+            <span class="icon">&#x1F535;</span>
+            <span class="name">Gemini</span>
           </label>
         </div>
-        <h2>Starting Model</h2>
-        <div class="model-row">
-          <button class="model-chip selected starter-chip" data-model="claude">
-            <span class="dot dot-claude"></span>Claude
-          </button>
-          <button class="model-chip starter-chip" data-model="chatgpt">
-            <span class="dot dot-chatgpt"></span>ChatGPT
-          </button>
-          <button class="model-chip starter-chip" data-model="gemini">
-            <span class="dot dot-gemini"></span>Gemini
-          </button>
+
+        <div class="section-label">Starts First</div>
+        <div class="starter-grid">
+          <button class="starter-btn selected starter-chip" data-model="claude">Claude</button>
+          <button class="starter-btn starter-chip" data-model="chatgpt">ChatGPT</button>
+          <button class="starter-btn starter-chip" data-model="gemini">Gemini</button>
         </div>
-
-        <h2>Discussion Passes</h2>
-        <div class="pass-row">
-          <button class="pass-chip selected" data-passes="1">1</button>
-          <button class="pass-chip" data-passes="3">3</button>
-          <button class="pass-chip" data-passes="5">5</button>
-          <button class="pass-chip" data-passes="10">10</button>
-          <button class="pass-chip" data-passes="15">15</button>
-          <button class="pass-chip" data-passes="20">20</button>
-          <input type="number" id="custom-passes" min="1" placeholder="#" style="width: 52px; padding: 8px 6px; border: 1px solid #27272a; border-radius: 8px; background: #09090b; color: #fafafa; font-size: 12px; text-align: center;" title="Custom number of passes">
-        </div>
-
-        <h2>Your Prompt</h2>
-        <textarea id="prompt-input" placeholder="Enter your prompt here. The models will discuss, critique, and refine the answer through structured back-and-forth."></textarea>
-
-        <h2>Review Directives</h2>
-        <p style="font-size: 11px; color: #52525b; margin-bottom: 8px;">Select what you want the models to focus on when critiquing each other:</p>
-        <div class="directives-section">
-          <div class="directive-chips" id="directive-chips">
-            <button class="directive-chip selected" data-directive="strengths-weaknesses">Strengths &amp; Weaknesses</button>
-            <button class="directive-chip selected" data-directive="factual-accuracy">Factual Accuracy</button>
-            <button class="directive-chip selected" data-directive="logical-gaps">Logical Gaps</button>
-            <button class="directive-chip" data-directive="legal-sufficiency">Legal Sufficiency</button>
-            <button class="directive-chip" data-directive="risk-analysis">Risk Analysis</button>
-            <button class="directive-chip" data-directive="alternative-approaches">Alternative Approaches</button>
-            <button class="directive-chip" data-directive="evidence-alignment">Evidence Alignment</button>
-            <button class="directive-chip" data-directive="bias-detection">Bias Detection</button>
-            <button class="directive-chip" data-directive="completeness">Completeness</button>
-            <button class="directive-chip" data-directive="clarity-readability">Clarity &amp; Readability</button>
-            <button class="directive-chip" data-directive="counterarguments">Counterarguments</button>
-            <button class="directive-chip" data-directive="code-review">Code Review</button>
-            <button class="directive-chip" data-directive="security-analysis">Security Analysis</button>
-          </div>
-          <div class="custom-directives" id="custom-directives"></div>
-          <button class="add-directive-btn" id="add-custom-directive">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add custom directive
-          </button>
-        </div>
-
-        <div class="file-section">
-          <label class="file-label">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
-            Attach documents (up to 10)
-            <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv,.json,.xml,.html" multiple>
-          </label>
-          <div class="file-list" id="file-list"></div>
-          <div class="file-count" id="file-count"></div>
-        </div>
-
-        <button class="btn-start" id="start-btn">Start Discussion</button>
       </div>
+
+      <!-- Config Card -->
+      <div class="card">
+        <div class="section-label">Discussion Passes</div>
+        <div class="pass-grid">
+          <button class="pass-btn selected" data-passes="1">1</button>
+          <button class="pass-btn" data-passes="3">3</button>
+          <button class="pass-btn" data-passes="5">5</button>
+          <button class="pass-btn" data-passes="10">10</button>
+          <button class="pass-btn" data-passes="15">15</button>
+          <button class="pass-btn" data-passes="20">20</button>
+          <input type="number" class="pass-custom" id="custom-passes" min="1" placeholder="#">
+        </div>
+      </div>
+
+      <!-- Prompt Card -->
+      <div class="card">
+        <div class="section-label">Your Prompt</div>
+        <textarea id="prompt-input" placeholder="What do you want the models to discuss, analyze, or validate?"></textarea>
+
+        <div class="divider"></div>
+
+        <div class="section-label">Review Directives</div>
+        <div class="section-hint">What should models focus on when critiquing each other?</div>
+        <div class="directive-grid" id="directive-chips">
+          <button class="dir-chip selected" data-directive="strengths-weaknesses">Strengths &amp; Weaknesses</button>
+          <button class="dir-chip selected" data-directive="factual-accuracy">Factual Accuracy</button>
+          <button class="dir-chip selected" data-directive="logical-gaps">Logical Gaps</button>
+          <button class="dir-chip" data-directive="legal-sufficiency">Legal Sufficiency</button>
+          <button class="dir-chip" data-directive="risk-analysis">Risk Analysis</button>
+          <button class="dir-chip" data-directive="alternative-approaches">Alternatives</button>
+          <button class="dir-chip" data-directive="evidence-alignment">Evidence Alignment</button>
+          <button class="dir-chip" data-directive="bias-detection">Bias Detection</button>
+          <button class="dir-chip" data-directive="completeness">Completeness</button>
+          <button class="dir-chip" data-directive="clarity-readability">Clarity</button>
+          <button class="dir-chip" data-directive="counterarguments">Counterarguments</button>
+          <button class="dir-chip" data-directive="code-review">Code Review</button>
+          <button class="dir-chip" data-directive="security-analysis">Security</button>
+        </div>
+        <div class="custom-directives" id="custom-directives"></div>
+        <button class="add-btn" id="add-custom-directive">+ Custom directive</button>
+
+        <div class="divider"></div>
+
+        <div class="section-label">Attachments</div>
+        <label class="file-zone">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+          Attach documents (up to 10)
+          <input type="file" id="file-input" accept=".txt,.md,.pdf,.docx,.csv,.json,.xml,.html" multiple>
+        </label>
+        <div class="file-list" id="file-list"></div>
+        <div class="file-count" id="file-count"></div>
+      </div>
+
+      <button class="btn-start" id="start-btn">Start Discussion</button>
     </div>
 
-    <!-- Active Discussion -->
+    <!-- ─── Discussion ─── -->
     <div id="discussion-section" class="hidden">
       <div class="progress-label">
         <span>Pass <span id="pass-current">1</span> of <span id="pass-total">1</span></span>
-        <span id="turn-count">0</span> turns
+        <span><span id="turn-count">0</span> turns</span>
       </div>
-      <div class="progress-bar">
-        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
-      </div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
 
       <div class="discussion" id="discussion-feed"></div>
 
-      <!-- Waiting indicator -->
       <div class="waiting hidden" id="waiting-indicator">
         <div class="dots"><span></span><span></span><span></span></div>
         <span id="waiting-text">Waiting for Claude to respond...</span>
       </div>
 
-      <!-- Final synthesis -->
       <div class="synthesis-card hidden" id="synthesis-card">
         <h3>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
-          Final Synthesized Answer
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          Final Synthesis
         </h3>
-        <div id="synthesis-content" style="font-size: 14px; line-height: 1.7; color: #d4d4d8; white-space: pre-wrap;"></div>
+        <div id="synthesis-content" style="font-size:13.5px;line-height:1.75;color:#a1a1aa;white-space:pre-wrap;"></div>
       </div>
 
-      <!-- Actions -->
-      <div class="actions" id="action-buttons" style="display: none;">
+      <div class="actions" id="action-buttons" style="display:none;">
         <button class="btn btn-primary" id="new-btn">New Session</button>
-        <button class="btn" id="copy-btn">Copy Final Answer</button>
-        <button class="btn" id="export-btn">Export Markdown</button>
+        <button class="btn" id="copy-btn">Copy Result</button>
+        <button class="btn" id="export-btn">Export .md</button>
       </div>
     </div>
   </div>

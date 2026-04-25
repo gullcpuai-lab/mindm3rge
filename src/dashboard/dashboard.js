@@ -31,7 +31,7 @@ const DIRECTIVE_LABELS = {
 document.querySelectorAll('.model-toggle').forEach(toggle => {
   toggle.addEventListener('change', (e) => {
     const model = e.target.dataset.model;
-    const label = e.target.closest('.model-chip');
+    const label = e.target.closest('.model-card');
     if (e.target.checked) {
       participatingModels.add(model);
       label.classList.add('selected');
@@ -93,7 +93,7 @@ document.getElementById('custom-passes').addEventListener('input', (e) => {
 });
 
 // Directive chip selection
-document.querySelectorAll('.directive-chip').forEach(chip => {
+document.querySelectorAll('.dir-chip').forEach(chip => {
   chip.addEventListener('click', () => {
     chip.classList.toggle('selected');
   });
@@ -135,7 +135,7 @@ function renderCustomDirectives() {
 
 function getSelectedDirectives() {
   const selected = [];
-  document.querySelectorAll('.directive-chip.selected').forEach(chip => {
+  document.querySelectorAll('.dir-chip.selected').forEach(chip => {
     const key = chip.dataset.directive;
     selected.push(DIRECTIVE_LABELS[key] || key);
   });
