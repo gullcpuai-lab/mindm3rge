@@ -593,6 +593,11 @@ chrome.runtime.onMessage.addListener((message) => {
     });
   });
 
+  // Re-check connections when user returns to the dashboard tab
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkConnections();
+  });
+
   // Check connection status for each model
   checkConnections();
   // Load history
