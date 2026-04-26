@@ -154,18 +154,11 @@ async function uploadFilesThenPrompt(files, prompt) {
   }
 
   if (!uploaded) {
-    // Fallback: inject file content as text in the prompt
-    DEBUG && console.log('[MindM3rge] Gemini native upload not available — injecting file content as text');
-    reportBroken('fileInput', { context: 'upload attempt - falling back to text injection' });
-    const fileContext = files.map((f, i) => {
-      try {
-        const binary = atob(f.base64);
-        return `--- FILE ${i + 1}: ${f.name} ---\n${binary}\n--- END ${f.name} ---`;
-      } catch {
-        return `--- FILE ${i + 1}: ${f.name} (binary, not displayable) ---`;
-      }
-    }).join('\n\n');
-    prompt = prompt + '\n\n' + fileContext;
+    // Native upload failed — notify but don't inject binary content into prompt
+    DEBUG && console.log('[MindM3rge] Gemini native upload not available — files skipped');
+    reportBroken('fileInput', { context: 'upload attempt - native upload failed' });
+    const fileNames = files.map(f => f.name).join(', ');
+    prompt = prompt + `\n\n[Note: Files could not be uploaded to this model: ${fileNames}]`;
   }
 
   injectPrompt(prompt);
