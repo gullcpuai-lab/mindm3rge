@@ -625,6 +625,7 @@ document.getElementById('nav-setup')?.removeEventListener('click', () => {});
 document.getElementById('nav-setup')?.addEventListener('click', () => switchView('setup-section'));
 document.getElementById('nav-discussion')?.addEventListener('click', () => switchView('discussion-section'));
 document.getElementById('nav-history')?.addEventListener('click', () => { switchView('history-section'); loadHistory(); });
+document.getElementById('nav-about')?.addEventListener('click', () => { chrome.tabs.create({ url: chrome.runtime.getURL('src/dashboard/about.html') }); });
 
 // ═══ Skeleton loader (9) ═══
 function showSkeleton() {
