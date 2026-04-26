@@ -15,7 +15,7 @@ export function buildCritiquePrompt(originalPrompt, previousModelName, previousR
   let discussionBlock = '';
   if (priorTurns && priorTurns.length > 0) {
     const chain = priorTurns.map(t =>
-      `--- ${t.modelName} (${t.role}) ---\n${t.content}`
+      `--- ${t.modelName} (Round ${t.round}, ${t.role}) ---\n${t.content}`
     ).join('\n\n');
     discussionBlock = `\nDISCUSSION SO FAR:\n${chain}\n`;
   } else {

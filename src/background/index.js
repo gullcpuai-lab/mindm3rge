@@ -190,8 +190,7 @@ function getNextAction(session) {
   const otherModels = modelOrder.filter(m => m !== starterModel);
 
   if (currentStep === 'initial') {
-    // First critique — send initial response to first other model
-    const priorTurns = turns.filter(t => t.round === currentPass);
+    // First critique — send full discussion so far to first other model
     const prompt = buildCritiquePrompt(
       session.prompt,
       MODEL_NAMES[starterModel],
@@ -199,7 +198,7 @@ function getNextAction(session) {
       currentPass,
       passes,
       session.directives,
-      priorTurns
+      turns  // all turns so far
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
@@ -209,8 +208,7 @@ function getNextAction(session) {
     const uncritiqued = otherModels.filter(m => !critiquesThisPass.some(t => t.model === m));
 
     if (uncritiqued.length > 0) {
-      // Chain: include ALL prior turns this round so each model sees the full discussion
-      const priorTurns = turns.filter(t => t.round === currentPass);
+      // Chain: include ALL turns so each model sees the full discussion history
       const prompt = buildCritiquePrompt(
         session.prompt,
         '',
@@ -218,7 +216,7 @@ function getNextAction(session) {
         currentPass,
         passes,
         session.directives,
-        priorTurns
+        turns  // all turns so far
       );
       return { done: false, model: uncritiqued[0], step: 'critique', pass: currentPass, prompt };
     }
@@ -241,7 +239,7 @@ function getNextAction(session) {
   }
 
   if (currentStep === 'revision') {
-    const priorTurns = turns.filter(t => t.round === currentPass);
+    // After revision, send full discussion history to first critic
     const prompt = buildCritiquePrompt(
       session.prompt,
       MODEL_NAMES[session.currentModel],
@@ -249,7 +247,7 @@ function getNextAction(session) {
       currentPass,
       passes,
       session.directives,
-      priorTurns
+      turns  // all turns so far
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
