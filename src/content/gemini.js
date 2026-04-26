@@ -246,7 +246,7 @@ function watchForResponse() {
         stableCount = 1;
       }
 
-      if (stableCount >= 3) {
+      if (stableCount >= 5) {
         clearInterval(checkInterval);
         lastResponseText = text;
         isWaitingForResponse = false;

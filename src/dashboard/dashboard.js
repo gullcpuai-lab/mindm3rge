@@ -281,6 +281,15 @@ document.getElementById('back-btn')?.addEventListener('click', () => {
 });
 
 // Cancel session
+// Skip current model and continue discussion
+document.getElementById('skip-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('skip-btn');
+  btn.textContent = 'Skipping...';
+  btn.disabled = true;
+  await chrome.runtime.sendMessage({ type: 'SKIP_MODEL' });
+  setTimeout(() => { btn.textContent = 'Skip'; btn.disabled = false; }, 3000);
+});
+
 document.getElementById('cancel-btn')?.addEventListener('click', async () => {
   await chrome.runtime.sendMessage({ type: 'CANCEL_SESSION' });
   document.getElementById('setup-section').classList.remove('hidden');

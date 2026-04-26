@@ -85,6 +85,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleCancelSession().then(sendResponse);
     return true;
   }
+
+  if (message.type === 'SKIP_MODEL') {
+    handleSkipModel().then(sendResponse);
+    return true;
+  }
 });
 
 async function handleStartSession(data) {
@@ -390,6 +395,41 @@ async function sendToModel(model, prompt, files) {
   if (!sent) {
     DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
   }
+}
+
+async function handleSkipModel() {
+  const session = await getSession();
+  if (!session || session.status !== 'running') return { ok: false };
+
+  // Add a placeholder turn for the skipped model
+  session.turns.push({
+    model: session.currentModel,
+    modelName: MODEL_NAMES[session.currentModel] || session.currentModel,
+    role: session.currentStep,
+    round: session.currentPass,
+    content: '[This model was skipped]',
+    timestamp: new Date().toISOString(),
+    skipped: true,
+  });
+
+  // Determine next action as if the model had responded
+  const nextAction = getNextAction(session);
+
+  if (nextAction.done) {
+    session.status = 'complete';
+    await saveSession(session);
+    await saveToHistory(session);
+    chrome.runtime.sendMessage({ type: 'SESSION_COMPLETE', session });
+    return { ok: true, complete: true };
+  }
+
+  session.currentStep = nextAction.step;
+  session.currentModel = nextAction.model;
+  session.currentPass = nextAction.pass;
+  await saveSession(session);
+
+  await sendToModel(nextAction.model, nextAction.prompt, session.files);
+  return { ok: true, nextModel: nextAction.model };
 }
 
 async function handleCancelSession() {
