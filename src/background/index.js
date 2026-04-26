@@ -325,18 +325,21 @@ async function sendToModel(model, prompt, files) {
   const domain = `${url.split('/')[0]}//${url.split('/')[2]}/*`;
   const tabs = await chrome.tabs.query({ url: domain });
   let tab;
+  let needsLoad = false;
 
   if (tabs.length > 0) {
     tab = tabs[0];
-    // Only bring to front if tabs are visible
-    if (!hideTabs) {
-      await chrome.tabs.update(tab.id, { active: true });
-    }
+    // Navigate to a fresh chat so old conversation doesn't interfere
+    await chrome.tabs.update(tab.id, { url, active: !hideTabs });
+    needsLoad = true;
   } else {
     // Create tab — hidden (not active) if hideTabs is on
     tab = await chrome.tabs.create({ url, active: !hideTabs });
     llmTabIds.add(tab.id);
+    needsLoad = true;
+  }
 
+  if (needsLoad) {
     // Wait for page to load
     await new Promise(resolve => {
       chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
@@ -347,7 +350,7 @@ async function sendToModel(model, prompt, files) {
       });
     });
     // Extra wait for JS to initialize
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 3000));
   }
 
   // Inject the prompt (and files on first message to each model) via content script
