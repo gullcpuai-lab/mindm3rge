@@ -165,12 +165,25 @@ function injectPrompt(prompt) {
 
   input.focus();
 
+  // Clear existing content
+  document.execCommand('selectAll', false, null);
+  document.execCommand('delete', false, null);
+
   if (input.tagName === 'TEXTAREA') {
     input.value = prompt;
     input.dispatchEvent(new Event('input', { bubbles: true }));
   } else {
-    // contenteditable div
-    input.textContent = prompt;
+    // contenteditable div — use insertText to trigger React's event system
+    const lines = prompt.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].length > 0) {
+        document.execCommand('insertText', false, lines[i]);
+      }
+      if (i < lines.length - 1) {
+        input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', shiftKey: true, bubbles: true }));
+        document.execCommand('insertLineBreak', false, null);
+      }
+    }
     input.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
