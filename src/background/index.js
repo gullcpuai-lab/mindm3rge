@@ -20,6 +20,8 @@ const MODEL_NAMES = {
 // Track LLM tab IDs for show/hide
 const llmTabIds = new Set();
 let hideTabs = true;
+// Track which models got a fresh chat this session
+const freshChatOpened = new Set();
 
 // Open dashboard when extension icon is clicked
 chrome.action.onClicked.addListener(() => {
@@ -87,6 +89,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function handleStartSession(data) {
   const { prompt, starterModel, passes, models, goal, fileContent, files, directives } = data;
+
+  // Reset fresh chat tracking for new session
+  freshChatOpened.clear();
 
   // Build prompts — files are uploaded natively, never injected as text
   let initialPrompt = prompt;
@@ -323,11 +328,20 @@ async function sendToModel(model, prompt, files) {
   let tab;
   let needsLoad = false;
 
+  const needsFreshChat = !freshChatOpened.has(model);
+
   if (tabs.length > 0) {
     tab = tabs[0];
-    // Navigate to a fresh chat so old conversation doesn't interfere
-    await chrome.tabs.update(tab.id, { url, active: !hideTabs });
-    needsLoad = true;
+    if (needsFreshChat) {
+      // First visit this session — navigate to fresh chat
+      await chrome.tabs.update(tab.id, { url, active: !hideTabs });
+      needsLoad = true;
+    } else {
+      // Same session, reuse existing chat thread
+      if (!hideTabs) {
+        await chrome.tabs.update(tab.id, { active: true });
+      }
+    }
   } else {
     // Create tab — hidden (not active) if hideTabs is on
     tab = await chrome.tabs.create({ url, active: !hideTabs });
@@ -349,8 +363,10 @@ async function sendToModel(model, prompt, files) {
     await new Promise(r => setTimeout(r, 3000));
   }
 
-  // Always upload files since each model gets a fresh chat
-  const filesToSend = (files && files.length > 0) ? files : null;
+  freshChatOpened.add(model);
+
+  // Upload files only on first visit (fresh chat) — subsequent turns reuse the chat
+  const filesToSend = (needsFreshChat && files && files.length > 0) ? files : null;
 
   // Retry sending message — content script may not be ready yet
   const message = { type: 'INJECT_PROMPT', prompt, files: filesToSend };
