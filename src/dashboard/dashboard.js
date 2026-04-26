@@ -175,25 +175,14 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
       reader.readAsDataURL(file);
     });
 
-    // Read as text only for plain text files — binary formats (docx, pdf, images)
-    // are uploaded natively to each LLM via the file input
-    let textContent = '';
-    const textExts = ['.txt', '.md', '.csv', '.json', '.xml', '.html', '.css', '.js', '.py', '.ts', '.yaml', '.yml', '.log', '.sql'];
-    const isTextFile = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
-    if (isTextFile) {
-      try {
-        textContent = await file.text();
-      } catch {
-        textContent = '';
-      }
-    }
+    // All files are uploaded natively to each LLM via their file input
+    // No text extraction needed — the LLMs handle it themselves
 
     uploadedFiles.push({
       name: file.name,
       size: file.size,
       mimeType: file.type || 'application/octet-stream',
       base64,
-      content: textContent,
     });
   }
 
@@ -225,14 +214,8 @@ function renderFileList() {
 }
 
 function buildFileContext() {
-  if (uploadedFiles.length === 0) return null;
-  // Only include text-readable files in the prompt context
-  // Binary files (docx, pdf, images) are uploaded natively to each LLM
-  const textFiles = uploadedFiles.filter(f => f.content && f.content.length > 0);
-  if (textFiles.length === 0) return null;
-  return textFiles.map((f, i) =>
-    `--- DOCUMENT ${i + 1}: ${f.name} ---\n${f.content}\n--- END ${f.name} ---`
-  ).join('\n\n');
+  // All files are uploaded natively to LLMs — no text injection into prompts
+  return null;
 }
 
 // Toggle LLM tabs visibility
