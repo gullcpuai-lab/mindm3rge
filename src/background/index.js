@@ -90,6 +90,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleSkipModel().then(sendResponse);
     return true;
   }
+
+  if (message.type === 'RETRY_MODEL') {
+    handleRetryModel().then(sendResponse);
+    return true;
+  }
 });
 
 async function handleStartSession(data) {
@@ -395,6 +400,24 @@ async function sendToModel(model, prompt, files) {
   if (!sent) {
     DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
   }
+}
+
+async function handleRetryModel() {
+  const session = await getSession();
+  if (!session || session.status !== 'running') return { ok: false };
+
+  const model = session.currentModel;
+
+  // Force a fresh chat for this model by removing it from freshChatOpened
+  freshChatOpened.delete(model);
+
+  // Rebuild the prompt for the current step
+  const nextAction = getNextAction(session);
+  const prompt = nextAction.done ? session.prompt : nextAction.prompt;
+
+  // Send to the same model in a fresh chat
+  await sendToModel(model, prompt, session.files);
+  return { ok: true, model };
 }
 
 async function handleSkipModel() {

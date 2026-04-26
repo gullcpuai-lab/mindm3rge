@@ -281,6 +281,15 @@ document.getElementById('back-btn')?.addEventListener('click', () => {
 });
 
 // Cancel session
+// Retry current model in a fresh chat
+document.getElementById('retry-model-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('retry-model-btn');
+  btn.textContent = 'Retrying...';
+  btn.disabled = true;
+  await chrome.runtime.sendMessage({ type: 'RETRY_MODEL' });
+  setTimeout(() => { btn.textContent = 'Retry'; btn.disabled = false; }, 5000);
+});
+
 // Skip current model and continue discussion
 document.getElementById('skip-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('skip-btn');
