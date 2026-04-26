@@ -171,20 +171,24 @@ function injectPrompt(prompt) {
   input.textContent = prompt;
   input.dispatchEvent(new Event('input', { bubbles: true }));
 
-  setTimeout(() => {
+  // Wait for send button to become enabled (file uploads may delay it)
+  let sendAttempts = 0;
+  const trySend = setInterval(() => {
+    sendAttempts++;
     const sendResult = find('sendButton');
     const sendButton = sendResult.el;
 
     if (sendButton && !sendButton.disabled) {
+      clearInterval(trySend);
       sendButton.click();
       isWaitingForResponse = true;
       watchForResponse();
-    } else {
-      // Fallback: try Enter key
+    } else if (sendAttempts >= 30) {
+      clearInterval(trySend);
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       isWaitingForResponse = true;
       watchForResponse();
-      if (!sendButton) reportBroken('sendButton', { context: 'after typing prompt' });
+      if (!sendButton) reportBroken('sendButton', { context: 'after typing prompt, send button not found after 30s' });
     }
   }, 500);
 }
