@@ -584,6 +584,15 @@ chrome.runtime.onMessage.addListener((message) => {
     }
   } catch (e) {}
 
+  // Connect buttons — open LLM login pages in a new tab
+  document.querySelectorAll('.conn-btn[data-connect]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      chrome.tabs.create({ url: btn.dataset.connect });
+    });
+  });
+
   // Check connection status for each model
   checkConnections();
   // Load history

@@ -638,7 +638,7 @@
               <div class="mc-name">Claude</div>
               <div class="mc-conn" id="conn-claude"><span class="conn-dot" style="background:var(--text3)"></span> <span class="conn-status" style="color:var(--text3)">Checking...</span></div>
               <select class="role-select" data-model="claude"><option value="">No role</option><option value="default">Default</option><option value="advocate">Devil's Advocate</option><option value="factcheck">Fact Checker</option><option value="legal">Legal Expert</option><option value="technical">Technical Reviewer</option><option value="creative">Creative Thinker</option><option value="custom">Custom...</option></select>
-              <button class="conn-btn hidden" onclick="event.preventDefault();event.stopPropagation();window.open('https://claude.ai/login','_blank')">Connect</button>
+              <button class="conn-btn hidden" data-connect="https://claude.ai/login">Connect</button>
             </label>
             <label class="model-card on" data-model="chatgpt">
               <input type="checkbox" class="model-toggle" data-model="chatgpt" checked>
@@ -647,7 +647,7 @@
               <div class="mc-name">ChatGPT</div>
               <div class="mc-conn" id="conn-chatgpt"><span class="conn-dot" style="background:var(--text3)"></span> <span class="conn-status" style="color:var(--text3)">Checking...</span></div>
               <select class="role-select" data-model="chatgpt"><option value="">No role</option><option value="default">Default</option><option value="advocate">Devil's Advocate</option><option value="factcheck">Fact Checker</option><option value="legal">Legal Expert</option><option value="technical">Technical Reviewer</option><option value="creative">Creative Thinker</option><option value="custom">Custom...</option></select>
-              <button class="conn-btn hidden" onclick="event.preventDefault();event.stopPropagation();window.open('https://chatgpt.com','_blank')">Connect</button>
+              <button class="conn-btn hidden" data-connect="https://chatgpt.com">Connect</button>
             </label>
             <label class="model-card on" data-model="gemini">
               <input type="checkbox" class="model-toggle" data-model="gemini" checked>
@@ -656,7 +656,7 @@
               <div class="mc-name">Gemini</div>
               <div class="mc-conn" id="conn-gemini"><span class="conn-dot" style="background:var(--text3)"></span> <span class="conn-status" style="color:var(--text3)">Checking...</span></div>
               <select class="role-select" data-model="gemini"><option value="">No role</option><option value="default">Default</option><option value="advocate">Devil's Advocate</option><option value="factcheck">Fact Checker</option><option value="legal">Legal Expert</option><option value="technical">Technical Reviewer</option><option value="creative">Creative Thinker</option><option value="custom">Custom...</option></select>
-              <button class="conn-btn hidden" onclick="event.preventDefault();event.stopPropagation();window.open('https://gemini.google.com','_blank')">Connect</button>
+              <button class="conn-btn hidden" data-connect="https://gemini.google.com">Connect</button>
             </label>
           </div>
           <div class="card-title" style="margin-top: 14px;">Starts First <span class="info" data-tip="This model generates the initial response. Other models then critique it.">i</span></div>
