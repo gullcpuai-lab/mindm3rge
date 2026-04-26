@@ -88,17 +88,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleStartSession(data) {
   const { prompt, starterModel, passes, models, goal, fileContent, files, directives } = data;
 
-  // Build the initial prompt for the starter model — just the user's question + docs
-  // Goal and directives are meta-instructions for the critique phase only
+  // Build prompts — files are uploaded natively, never injected as text
   let initialPrompt = prompt;
-  if (fileContent) {
-    initialPrompt += `\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`;
-  }
 
-  // Build the full prompt with goal context — used only in critique/revision prompts
-  let fullPrompt = initialPrompt;
+  // Full prompt with goal context — used in critique/revision prompts
+  let fullPrompt = prompt;
   if (goal) {
-    fullPrompt = `${initialPrompt}\n\n--- DISCUSSION GOAL ---\n${goal}\n--- END GOAL ---`;
+    fullPrompt = `${prompt}\n\n--- DISCUSSION GOAL ---\n${goal}\n--- END GOAL ---`;
   }
 
   // Determine model order from selected participants
@@ -353,15 +349,8 @@ async function sendToModel(model, prompt, files) {
     await new Promise(r => setTimeout(r, 3000));
   }
 
-  // Inject the prompt (and files on first message to each model) via content script
-  const session = await getSession();
-  let filesToSend = null;
-  if (files && files.length > 0 && session && !session.filesUploaded[model]) {
-    filesToSend = files;
-    // Mark files as uploaded for this model
-    session.filesUploaded[model] = true;
-    await saveSession(session);
-  }
+  // Always upload files since each model gets a fresh chat
+  const filesToSend = (files && files.length > 0) ? files : null;
 
   // Retry sending message — content script may not be ready yet
   const message = { type: 'INJECT_PROMPT', prompt, files: filesToSend };
