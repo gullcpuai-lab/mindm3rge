@@ -1,5 +1,11 @@
 // Popup script — handles UI interactions
 
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 let selectedModel = 'claude';
 let selectedPasses = 1;
 let fileContent = null;
@@ -147,10 +153,10 @@ function updateSessionView(session) {
   // Render turns
   const turnsList = document.getElementById('turns-list');
   turnsList.innerHTML = session.turns.map(t => `
-    <div class="turn-item ${t.model}">
-      <div class="turn-model">${t.modelName}</div>
-      <div class="turn-role">Round ${t.round} · ${t.role}</div>
-      <div class="turn-preview">${t.content.substring(0, 200)}${t.content.length > 200 ? '...' : ''}</div>
+    <div class="turn-item ${escapeHtml(t.model)}">
+      <div class="turn-model">${escapeHtml(t.modelName)}</div>
+      <div class="turn-role">Round ${t.round} · ${escapeHtml(t.role)}</div>
+      <div class="turn-preview">${escapeHtml(t.content.substring(0, 200))}${t.content.length > 200 ? '...' : ''}</div>
     </div>
   `).join('');
 

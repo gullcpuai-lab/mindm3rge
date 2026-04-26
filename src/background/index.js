@@ -3,6 +3,8 @@
 import { buildCritiquePrompt, buildRevisionPrompt, buildSynthesisPrompt } from '../utils/prompts.js';
 import { getSession, saveSession, saveToHistory, getSettings } from '../utils/storage.js';
 
+const DEBUG = false;
+
 const MODEL_URLS = {
   claude: 'https://claude.ai/new',
   chatgpt: 'https://chatgpt.com/',
@@ -49,7 +51,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'HEALTH_CHECK_REPORT') {
-    console.log('[MindM3rge] Health check:', JSON.stringify(message.report, null, 2));
+    DEBUG && console.log('[MindM3rge] Health check:', JSON.stringify(message.report, null, 2));
     // Store for debugging
     chrome.storage.local.get('errorLogs', (result) => {
       const logs = result.errorLogs || [];
@@ -269,7 +271,7 @@ function handleSelectorError(report) {
     message: `Broken: ${broken.join(', ')}. Check error logs in extension storage.`,
   });
 
-  console.error('[MindM3rge] Selector error report:', JSON.stringify(report, null, 2));
+  DEBUG && console.error('[MindM3rge] Selector error report:', JSON.stringify(report, null, 2));
 }
 
 async function checkModelConnection(model) {
@@ -353,11 +355,22 @@ async function sendToModel(model, prompt, files) {
     await saveSession(session);
   }
 
-  await chrome.tabs.sendMessage(tab.id, {
-    type: 'INJECT_PROMPT',
-    prompt,
-    files: filesToSend,
-  });
+  // Retry sending message — content script may not be ready yet
+  const message = { type: 'INJECT_PROMPT', prompt, files: filesToSend };
+  let sent = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await chrome.tabs.sendMessage(tab.id, message);
+      sent = true;
+      break;
+    } catch (e) {
+      DEBUG && console.warn(`[MindM3rge] sendToModel(${model}) attempt ${attempt + 1} failed:`, e.message);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  if (!sent) {
+    DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
+  }
 }
 
 async function handleCancelSession() {

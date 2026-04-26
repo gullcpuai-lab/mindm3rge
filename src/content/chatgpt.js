@@ -1,5 +1,6 @@
 // Content script for chatgpt.com / chat.openai.com — self-healing with selector engine
 
+const DEBUG = false;
 let isWaitingForResponse = false;
 let lastResponseText = '';
 
@@ -60,7 +61,7 @@ function findAll(type) {
 }
 
 function reportBroken(elementType, details) {
-  console.warn(`[MindM3rge] ChatGPT selector broken: ${elementType}`, details);
+  DEBUG && console.warn(`[MindM3rge] ChatGPT selector broken: ${elementType}`, details);
   try {
     chrome.runtime.sendMessage({
       type: 'SELECTOR_ERROR',
@@ -84,7 +85,7 @@ setTimeout(() => {
       reportBroken(type, { status: 'not found on page load' });
     }
   }
-  console.log('[MindM3rge] ChatGPT health check:', report);
+  DEBUG && console.log('[MindM3rge] ChatGPT health check:', report);
   try {
     chrome.runtime.sendMessage({ type: 'HEALTH_CHECK_REPORT', model: 'chatgpt', report });
   } catch {}
@@ -137,10 +138,10 @@ async function uploadFilesThenPrompt(files, prompt) {
     }
     fileInput.files = dt.files;
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    console.log('[MindM3rge] Uploaded', files.length, 'files to ChatGPT via', fileInput.id || 'input[type="file"]');
+    DEBUG && console.log('[MindM3rge] Uploaded', files.length, 'files to ChatGPT via', fileInput.id || 'input[type="file"]');
     await new Promise(r => setTimeout(r, 3000));
   } else {
-    console.log('[MindM3rge] No file input found on ChatGPT');
+    DEBUG && console.log('[MindM3rge] No file input found on ChatGPT');
     reportBroken('fileInput', { context: 'upload attempt' });
   }
 
@@ -159,7 +160,7 @@ function injectPrompt(prompt) {
   }
 
   if (result.method === 'discovery') {
-    console.log('[MindM3rge] ChatGPT input found via auto-discovery');
+    DEBUG && console.log('[MindM3rge] ChatGPT input found via auto-discovery');
   }
 
   input.focus();
@@ -192,6 +193,7 @@ function injectPrompt(prompt) {
 }
 
 function watchForResponse() {
+  const responseCountAtStart = findAll('response').length;
   const checkInterval = setInterval(() => {
     // Check if still generating
     const stopBtn = find('stopButton').el;
@@ -199,26 +201,34 @@ function watchForResponse() {
 
     // Get responses
     const responses = findAll('response');
+    if (responses.length === 0) return;
 
-    if (responses.length > 0) {
-      const lastResponse = responses[responses.length - 1];
-      const text = lastResponse.innerText || lastResponse.textContent;
+    // Capture if new element appeared OR last element's text changed
+    const lastResponse = responses[responses.length - 1];
+    const text = lastResponse.innerText || lastResponse.textContent;
+    const isNew = responses.length > responseCountAtStart;
+    const isChanged = text && text !== lastResponseText && text.length > 10;
 
-      if (text && text !== lastResponseText && text.length > 10) {
-        setTimeout(() => {
-          const finalText = lastResponse.innerText || lastResponse.textContent;
-          if (finalText === text) {
-            lastResponseText = finalText;
-            isWaitingForResponse = false;
-            clearInterval(checkInterval);
+    if ((isNew || isChanged) && text && text.length > 10) {
+      // Stop polling immediately to prevent duplicate captures
+      clearInterval(checkInterval);
 
-            chrome.runtime.sendMessage({
-              type: 'RESPONSE_CAPTURED',
-              data: { model: 'chatgpt', response: finalText },
-            });
-          }
-        }, 2000);
-      }
+      setTimeout(() => {
+        const finalText = lastResponse.innerText || lastResponse.textContent;
+        if (finalText === text) {
+          lastResponseText = finalText;
+          isWaitingForResponse = false;
+
+          chrome.runtime.sendMessage({
+            type: 'RESPONSE_CAPTURED',
+            data: { model: 'chatgpt', response: finalText },
+          });
+        } else {
+          // Response still changing — resume watching
+          isWaitingForResponse = true;
+          watchForResponse();
+        }
+      }, 2000);
     }
   }, 1000);
 
