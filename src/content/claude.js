@@ -180,41 +180,54 @@ function injectPrompt(prompt) {
 
 function watchForResponse() {
   const responseCountAtStart = findAll('response').length;
+  let stableText = '';
+  let stableCount = 0;
+
   const checkInterval = setInterval(() => {
     // Check if still generating
     const stopBtn = find('stopButton').el;
-    if (stopBtn) return;
+    if (stopBtn) {
+      stableCount = 0;
+      return;
+    }
+
+    // Skip error states — wait for retry
+    const errorEl = document.querySelector('[class*="error"], [class*="retry"]');
+    if (errorEl && errorEl.offsetParent !== null) {
+      stableCount = 0;
+      return;
+    }
 
     // Get responses
     const responses = findAll('response');
     if (responses.length === 0) return;
 
-    // Capture if new element appeared OR last element's text changed
+    // Get text from the LAST response element
     const lastResponse = responses[responses.length - 1];
     const text = lastResponse.innerText || lastResponse.textContent;
     const isNew = responses.length > responseCountAtStart;
     const isChanged = text && text !== lastResponseText && text.length > 10;
 
     if ((isNew || isChanged) && text && text.length > 10) {
-      // Stop polling immediately to prevent duplicate captures
-      clearInterval(checkInterval);
+      // Check stability — text must stay the same for 3 consecutive checks (3 seconds)
+      if (text === stableText) {
+        stableCount++;
+      } else {
+        stableText = text;
+        stableCount = 1;
+      }
 
-      setTimeout(() => {
-        const finalText = lastResponse.innerText || lastResponse.textContent;
-        if (finalText === text) {
-          lastResponseText = finalText;
-          isWaitingForResponse = false;
+      if (stableCount >= 3) {
+        // Response is stable — capture it
+        clearInterval(checkInterval);
+        lastResponseText = text;
+        isWaitingForResponse = false;
 
-          chrome.runtime.sendMessage({
-            type: 'RESPONSE_CAPTURED',
-            data: { model: 'claude', response: finalText },
-          });
-        } else {
-          // Response still changing — resume watching
-          isWaitingForResponse = true;
-          watchForResponse();
-        }
-      }, 2000);
+        chrome.runtime.sendMessage({
+          type: 'RESPONSE_CAPTURED',
+          data: { model: 'claude', response: text },
+        });
+      }
     }
   }, 1000);
 
@@ -223,6 +236,19 @@ function watchForResponse() {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
       isWaitingForResponse = false;
+      // Try to capture whatever we have
+      const responses = findAll('response');
+      if (responses.length > 0) {
+        const text = responses[responses.length - 1].innerText || '';
+        if (text.length > 10 && text !== lastResponseText) {
+          lastResponseText = text;
+          chrome.runtime.sendMessage({
+            type: 'RESPONSE_CAPTURED',
+            data: { model: 'claude', response: text },
+          });
+          return;
+        }
+      }
       reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
   }, 300000);

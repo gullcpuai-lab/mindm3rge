@@ -194,49 +194,57 @@ function injectPrompt(prompt) {
 
 function watchForResponse() {
   const responseCountAtStart = findAll('response').length;
-  const checkInterval = setInterval(() => {
-    // Check if still generating
-    const stopBtn = find('stopButton').el;
-    if (stopBtn) return;
+  let stableText = '';
+  let stableCount = 0;
 
-    // Get responses
+  const checkInterval = setInterval(() => {
+    const stopBtn = find('stopButton').el;
+    if (stopBtn) { stableCount = 0; return; }
+
     const responses = findAll('response');
     if (responses.length === 0) return;
 
-    // Capture if new element appeared OR last element's text changed
     const lastResponse = responses[responses.length - 1];
     const text = lastResponse.innerText || lastResponse.textContent;
     const isNew = responses.length > responseCountAtStart;
     const isChanged = text && text !== lastResponseText && text.length > 10;
 
     if ((isNew || isChanged) && text && text.length > 10) {
-      // Stop polling immediately to prevent duplicate captures
-      clearInterval(checkInterval);
+      if (text === stableText) {
+        stableCount++;
+      } else {
+        stableText = text;
+        stableCount = 1;
+      }
 
-      setTimeout(() => {
-        const finalText = lastResponse.innerText || lastResponse.textContent;
-        if (finalText === text) {
-          lastResponseText = finalText;
-          isWaitingForResponse = false;
-
-          chrome.runtime.sendMessage({
-            type: 'RESPONSE_CAPTURED',
-            data: { model: 'chatgpt', response: finalText },
-          });
-        } else {
-          // Response still changing — resume watching
-          isWaitingForResponse = true;
-          watchForResponse();
-        }
-      }, 2000);
+      if (stableCount >= 3) {
+        clearInterval(checkInterval);
+        lastResponseText = text;
+        isWaitingForResponse = false;
+        chrome.runtime.sendMessage({
+          type: 'RESPONSE_CAPTURED',
+          data: { model: 'chatgpt', response: text },
+        });
+      }
     }
   }, 1000);
 
-  // Timeout after 5 minutes
   setTimeout(() => {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
       isWaitingForResponse = false;
+      const responses = findAll('response');
+      if (responses.length > 0) {
+        const text = responses[responses.length - 1].innerText || '';
+        if (text.length > 10 && text !== lastResponseText) {
+          lastResponseText = text;
+          chrome.runtime.sendMessage({
+            type: 'RESPONSE_CAPTURED',
+            data: { model: 'chatgpt', response: text },
+          });
+          return;
+        }
+      }
       reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
   }, 300000);
