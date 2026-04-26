@@ -281,6 +281,15 @@ document.getElementById('back-btn')?.addEventListener('click', () => {
 });
 
 // Cancel session
+// Capture current answer from the stuck model
+document.getElementById('capture-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('capture-btn');
+  btn.textContent = 'Capturing...';
+  btn.disabled = true;
+  await chrome.runtime.sendMessage({ type: 'FORCE_CAPTURE' });
+  setTimeout(() => { btn.textContent = 'Capture'; btn.disabled = false; }, 3000);
+});
+
 // Retry current model in a fresh chat
 document.getElementById('retry-model-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('retry-model-btn');

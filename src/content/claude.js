@@ -104,6 +104,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const isLoggedIn = !window.location.href.includes('/login');
     sendResponse({ loggedIn: isLoggedIn });
   }
+  if (message.type === 'FORCE_CAPTURE') {
+    const responses = findAll('response');
+    if (responses.length > 0) {
+      const text = responses[responses.length - 1].innerText || responses[responses.length - 1].textContent;
+      lastResponseText = text;
+      isWaitingForResponse = false;
+      sendResponse({ response: text });
+    } else {
+      sendResponse({ response: null });
+    }
+  }
   return true;
 });
 

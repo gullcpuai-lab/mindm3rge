@@ -95,6 +95,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleRetryModel().then(sendResponse);
     return true;
   }
+
+  if (message.type === 'FORCE_CAPTURE') {
+    handleForceCapture().then(sendResponse);
+    return true;
+  }
 });
 
 async function handleStartSession(data) {
@@ -400,6 +405,30 @@ async function sendToModel(model, prompt, files) {
   if (!sent) {
     DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
   }
+}
+
+async function handleForceCapture() {
+  const session = await getSession();
+  if (!session || session.status !== 'running') return { ok: false };
+
+  const model = session.currentModel;
+  const url = MODEL_URLS[model];
+  const domain = `${url.split('/')[0]}//${url.split('/')[2]}/*`;
+  const tabs = await chrome.tabs.query({ url: domain });
+
+  if (tabs.length === 0) return { ok: false, error: 'No tab found' };
+
+  try {
+    const result = await chrome.tabs.sendMessage(tabs[0].id, { type: 'FORCE_CAPTURE' });
+    if (result?.response) {
+      // Manually feed the response into the session
+      await handleResponseCaptured({ model, response: result.response }, tabs[0]);
+      return { ok: true };
+    }
+  } catch (e) {
+    DEBUG && console.error('[MindM3rge] Force capture failed:', e.message);
+  }
+  return { ok: false, error: 'No response found' };
 }
 
 async function handleRetryModel() {
