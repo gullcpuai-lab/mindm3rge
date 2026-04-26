@@ -260,32 +260,82 @@
     .prog-bar { background: rgba(255,255,255,0.04); border-radius: 6px; height: 4px; margin-bottom: 20px; overflow: hidden; }
     .prog-fill { height: 100%; background: linear-gradient(90deg, #7c5cfc, #00d4aa); border-radius: 6px; transition: width 0.5s; }
 
-    /* ═══ Turns ═══ */
-    .discussion { display: flex; flex-direction: column; gap: 12px; }
+    /* ═══ Turns — Conversation Thread ═══ */
+    .discussion { display: flex; flex-direction: column; gap: 0; }
     .turn {
-      background: var(--card); border: 0.5px solid var(--border);
-      border-radius: var(--r); overflow: hidden; animation: fadeUp 0.4s ease;
-      backdrop-filter: blur(20px);
-      box-shadow: var(--shadow);
-      transition: border-color 0.25s;
+      display: flex; gap: 16px; padding-bottom: 32px;
+      position: relative; animation: turnFadeIn 0.6s ease both;
     }
-    .turn:hover { border-color: var(--border-light); }
-    @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+    .turn::after {
+      content: ''; position: absolute;
+      left: 19px; top: 44px; bottom: 0;
+      width: 1px; background: rgba(255,255,255,0.06);
+    }
+    .turn:last-child::after { display: none; }
+    @keyframes turnFadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .turn-avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; z-index: 1; transition: all 0.3s;
+    }
+    .turn.claude .turn-avatar { background: rgba(245,158,11,0.15); border: 2px solid rgba(245,158,11,0.3); }
+    .turn.chatgpt .turn-avatar { background: rgba(16,185,129,0.15); border: 2px solid rgba(16,185,129,0.3); }
+    .turn.gemini .turn-avatar { background: rgba(59,130,246,0.15); border: 2px solid rgba(59,130,246,0.3); }
+    .turn-avatar.active {
+      animation: avatarPulse 1.5s ease-in-out infinite;
+    }
+    @keyframes avatarPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(124,92,252,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(124,92,252,0); }
+    }
+    .turn.claude .turn-avatar.active { animation-name: avatarPulseClaude; }
+    .turn.chatgpt .turn-avatar.active { animation-name: avatarPulseChatgpt; }
+    .turn.gemini .turn-avatar.active { animation-name: avatarPulseGemini; }
+    @keyframes avatarPulseClaude {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(245,158,11,0); }
+    }
+    @keyframes avatarPulseChatgpt {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+    }
+    @keyframes avatarPulseGemini {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
+      50% { box-shadow: 0 0 0 8px rgba(59,130,246,0); }
+    }
+    .turn-content { flex: 1; min-width: 0; }
     .turn-top {
-      display: flex; align-items: center; gap: 10px; padding: 12px 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
+      display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
     }
-    .turn-icon { display: flex; align-items: center; flex-shrink: 0; }
-    .turn-name { font-weight: 600; font-size: 13px; }
+    .turn-name { font-weight: 600; font-size: 14px; }
+    .turn.claude .turn-name { color: var(--orange); }
+    .turn.chatgpt .turn-name { color: var(--green); }
+    .turn.gemini .turn-name { color: var(--blue); }
     .turn-badge {
-      font-size: 9px; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600;
-      padding: 3px 8px; border-radius: 6px; background: rgba(124,92,252,0.12); color: #a78bfa;
+      font-size: 11px; color: #6b6580;
     }
-    .turn-meta { font-size: 10px; color: var(--text3); margin-left: auto; }
-    .turn-body { padding: 14px 16px; font-size: 13.5px; line-height: 1.7; color: var(--text2); white-space: pre-wrap; }
-    .turn.claude .turn-top { border-left: 3px solid var(--orange); }
-    .turn.chatgpt .turn-top { border-left: 3px solid var(--green); }
-    .turn.gemini .turn-top { border-left: 3px solid var(--blue); }
+    .turn-meta { font-size: 11px; color: #4a4360; }
+    .turn-actions {
+      display: flex; gap: 4px; margin-left: auto;
+    }
+    .turn-act {
+      width: 28px; height: 28px; border-radius: 6px;
+      border: none; background: transparent; color: #4a4360;
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .turn-act:hover { background: rgba(255,255,255,0.06); color: #b8b0c8; }
+    .turn-body {
+      font-size: 14px; line-height: 1.7; color: #b8b0c8;
+      background: rgba(255,255,255,0.02);
+      border-radius: 0 12px 12px 12px;
+      padding: 16px 20px;
+      border: 1px solid rgba(255,255,255,0.04);
+      white-space: pre-wrap;
+    }
 
     /* ═══ Timeline ═══ */
     .tl { padding: 4px 0; }

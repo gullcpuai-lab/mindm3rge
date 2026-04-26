@@ -508,18 +508,20 @@ function createTurnCard(turn) {
   card.dataset.content = turn.content; // for search
 
   card.innerHTML = `
-    <div class="turn-top">
-      <span class="turn-icon">${MODEL_ICONS[turn.model] || ''}</span>
-      <span class="turn-name">${turn.modelName}</span>
-      <span class="turn-badge">${roleLabels[turn.role] || turn.role}</span>
-      <span class="turn-meta">R${turn.round} · ${time}</span>
-      <div class="turn-actions">
-        <button class="turn-act pin-btn" title="Pin" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1.5 5.5L17 11H7l3.5-3.5z"/></svg></button>
-        <button class="turn-act ann-btn" title="Annotate" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
-        <button class="turn-act retry" title="Retry this turn" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+    <div class="turn-avatar">${MODEL_ICONS[turn.model] || ''}</div>
+    <div class="turn-content">
+      <div class="turn-top">
+        <span class="turn-name">${turn.modelName}</span>
+        <span class="turn-badge">${roleLabels[turn.role] || turn.role}</span>
+        <span class="turn-meta">R${turn.round} · ${time}</span>
+        <div class="turn-actions">
+          <button class="turn-act pin-btn" title="Pin" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1.5 5.5L17 11H7l3.5-3.5z"/></svg></button>
+          <button class="turn-act ann-btn" title="Annotate" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+          <button class="turn-act retry" title="Retry this turn" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
+        </div>
       </div>
+      <div class="turn-body">${escapeHtml(turn.content)}</div>
     </div>
-    <div class="turn-body">${escapeHtml(turn.content)}</div>
   `;
 
   // Collapsible (6) — auto-collapse long responses
@@ -533,17 +535,19 @@ function createTurnCard(turn) {
       const isCollapsed = body.classList.toggle('collapsed');
       toggle.innerHTML = isCollapsed ? '&#9660; Show more' : '&#9650; Show less';
     });
-    card.appendChild(toggle);
+    const contentEl = card.querySelector('.turn-content');
+    contentEl.appendChild(toggle);
   }
 
   // Pin button
   card.querySelector('.pin-btn').addEventListener('click', (e) => {
-    e.target.classList.toggle('pinned');
+    e.target.closest('.turn-act').classList.toggle('pinned');
   });
 
   // Annotation button
   card.querySelector('.ann-btn').addEventListener('click', (e) => {
-    const existing = card.querySelector('.ann-input');
+    const contentEl = card.querySelector('.turn-content');
+    const existing = contentEl.querySelector('.ann-input');
     if (existing) { existing.remove(); return; }
     const input = document.createElement('input');
     input.className = 'ann-input';
@@ -557,7 +561,7 @@ function createTurnCard(turn) {
         e.target.classList.add('annotated');
       }
     });
-    card.appendChild(input);
+    contentEl.appendChild(input);
     input.focus();
   });
 
