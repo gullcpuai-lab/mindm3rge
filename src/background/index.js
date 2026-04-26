@@ -88,12 +88,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function handleStartSession(data) {
   const { prompt, starterModel, passes, models, goal, fileContent, files, directives } = data;
 
-  let fullPrompt = prompt;
-  if (goal) {
-    fullPrompt = `${prompt}\n\n--- DISCUSSION GOAL ---\n${goal}\n--- END GOAL ---\nIMPORTANT: The models should work collaboratively toward the above goal. Don't just critique — actively improve and fix issues to achieve this goal.`;
-  }
+  // Build the initial prompt for the starter model — just the user's question + docs
+  // Goal and directives are meta-instructions for the critique phase only
+  let initialPrompt = prompt;
   if (fileContent) {
-    fullPrompt += `\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`;
+    initialPrompt += `\n\n--- ATTACHED DOCUMENTS ---\n${fileContent}\n--- END DOCUMENTS ---`;
+  }
+
+  // Build the full prompt with goal context — used only in critique/revision prompts
+  let fullPrompt = initialPrompt;
+  if (goal) {
+    fullPrompt = `${initialPrompt}\n\n--- DISCUSSION GOAL ---\n${goal}\n--- END GOAL ---`;
   }
 
   // Determine model order from selected participants
@@ -121,8 +126,8 @@ async function handleStartSession(data) {
 
   await saveSession(session);
 
-  // Open the starter model tab and inject the prompt + files
-  await sendToModel(starterModel, fullPrompt, session.files);
+  // Send just the user's question to the starter model (no meta-instructions)
+  await sendToModel(starterModel, initialPrompt, session.files);
 
   return { ok: true, sessionId: session.id };
 }
