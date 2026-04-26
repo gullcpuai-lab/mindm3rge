@@ -175,12 +175,17 @@ document.getElementById('file-input').addEventListener('change', async (e) => {
       reader.readAsDataURL(file);
     });
 
-    // Also read as text for fallback context injection
+    // Read as text only for plain text files — binary formats (docx, pdf, images)
+    // are uploaded natively to each LLM via the file input
     let textContent = '';
-    try {
-      textContent = await file.text();
-    } catch {
-      textContent = `[Binary file: ${file.name}]`;
+    const textExts = ['.txt', '.md', '.csv', '.json', '.xml', '.html', '.css', '.js', '.py', '.ts', '.yaml', '.yml', '.log', '.sql'];
+    const isTextFile = textExts.some(ext => file.name.toLowerCase().endsWith(ext));
+    if (isTextFile) {
+      try {
+        textContent = await file.text();
+      } catch {
+        textContent = '';
+      }
     }
 
     uploadedFiles.push({
@@ -221,7 +226,11 @@ function renderFileList() {
 
 function buildFileContext() {
   if (uploadedFiles.length === 0) return null;
-  return uploadedFiles.map((f, i) =>
+  // Only include text-readable files in the prompt context
+  // Binary files (docx, pdf, images) are uploaded natively to each LLM
+  const textFiles = uploadedFiles.filter(f => f.content && f.content.length > 0);
+  if (textFiles.length === 0) return null;
+  return textFiles.map((f, i) =>
     `--- DOCUMENT ${i + 1}: ${f.name} ---\n${f.content}\n--- END ${f.name} ---`
   ).join('\n\n');
 }
