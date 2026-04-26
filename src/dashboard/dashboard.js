@@ -514,9 +514,9 @@ function createTurnCard(turn) {
       <span class="turn-badge">${roleLabels[turn.role] || turn.role}</span>
       <span class="turn-meta">R${turn.round} · ${time}</span>
       <div class="turn-actions">
-        <button class="turn-act pin-btn" title="Pin" data-turn="${turnId}">&#128204;</button>
-        <button class="turn-act ann-btn" title="Annotate" data-turn="${turnId}">&#128221;</button>
-        <button class="turn-act retry" title="Retry this turn" data-turn="${turnId}">&#8635;</button>
+        <button class="turn-act pin-btn" title="Pin" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1.5 5.5L17 11H7l3.5-3.5z"/></svg></button>
+        <button class="turn-act ann-btn" title="Annotate" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+        <button class="turn-act retry" title="Retry this turn" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
       </div>
     </div>
     <div class="turn-body">${escapeHtml(turn.content)}</div>
@@ -552,7 +552,7 @@ function createTurnCard(turn) {
       if (ev.key === 'Enter' && input.value.trim()) {
         const ann = document.createElement('div');
         ann.className = 'annotation';
-        ann.innerHTML = `<span class="ann-icon">&#128221;</span><span class="ann-text">${escapeHtml(input.value)}</span>`;
+        ann.innerHTML = `<span class="ann-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></span><span class="ann-text">${escapeHtml(input.value)}</span>`;
         input.replaceWith(ann);
         e.target.classList.add('annotated');
       }
