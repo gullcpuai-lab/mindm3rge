@@ -1,6 +1,6 @@
 // Critique prompt templates for multi-model validation
 
-export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives) {
+export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives, priorTurns) {
   const directiveBlock = directives && directives.length > 0
     ? `\n\nFOCUS YOUR CRITIQUE ON THESE SPECIFIC AREAS:\n${directives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n`
     : '';
@@ -11,24 +11,31 @@ export function buildCritiquePrompt(originalPrompt, previousModelName, previousR
     ? `\n\nDISCUSSION GOAL: ${goalMatch[1].trim()}\nYou must work toward this goal. Don't just critique — actively propose specific improvements and fixes.\n`
     : '';
 
+  // Build discussion chain — show all prior turns so each model sees the full conversation
+  let discussionBlock = '';
+  if (priorTurns && priorTurns.length > 0) {
+    const chain = priorTurns.map(t =>
+      `--- ${t.modelName} (${t.role}) ---\n${t.content}`
+    ).join('\n\n');
+    discussionBlock = `\nDISCUSSION SO FAR:\n${chain}\n`;
+  } else {
+    discussionBlock = `\n${previousModelName.toUpperCase()}'S RESPONSE:\n${previousResponse}\n`;
+  }
+
   return `You are participating in a multi-model validation process (Round ${roundNumber}/${totalRounds}).
 
 ORIGINAL USER PROMPT:
 ${originalPrompt}
+${discussionBlock}${goalBlock}${directiveBlock}
+Review the discussion above. Consider what has been said by all prior participants, then provide your analysis:
 
-${previousModelName.toUpperCase()}'S RESPONSE:
-${previousResponse}
-${goalBlock}${directiveBlock}
-Please provide a thorough, structured critique of the above response:
+1. **AGREE**: What points from the discussion are correct and well-reasoned?
+2. **DISAGREE**: What points are incorrect, poorly reasoned, or incomplete? Explain why.
+3. **NEW INSIGHTS**: What important aspects were missed by all prior participants?
+4. **RISKS**: What assumptions are dangerous or unvalidated?
+5. **IMPROVED ANSWER**: Provide your own improved version of the answer, building on the strengths of the discussion while addressing the weaknesses.
 
-1. **STRENGTHS**: What is correct, well-reasoned, or valuable in this response?
-2. **WEAKNESSES**: What is incorrect, poorly reasoned, incomplete, or misleading?
-3. **RISKS**: What assumptions are dangerous, unvalidated, or could lead to bad outcomes?
-4. **GAPS**: What important aspects were not addressed or were overlooked?
-5. **ALTERNATIVES**: What different approaches, frameworks, or perspectives should be considered?
-6. **IMPROVED ANSWER**: Provide your own improved version of the answer, incorporating the strengths of the original while addressing the weaknesses you identified.
-
-Be rigorous, specific, and constructive. Do not be deferential — if the previous response is wrong, say so clearly and explain why.`;
+Be rigorous, specific, and constructive. Do not be deferential — if a previous response is wrong, say so clearly and explain why.`;
 }
 
 export function buildRevisionPrompt(originalPrompt, modelName, originalResponse, critiques) {

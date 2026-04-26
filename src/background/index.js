@@ -190,13 +190,16 @@ function getNextAction(session) {
   const otherModels = modelOrder.filter(m => m !== starterModel);
 
   if (currentStep === 'initial') {
+    // First critique — send initial response to first other model
+    const priorTurns = turns.filter(t => t.round === currentPass);
     const prompt = buildCritiquePrompt(
       session.prompt,
       MODEL_NAMES[starterModel],
       turns[turns.length - 1].content,
       currentPass,
       passes,
-      session.directives
+      session.directives,
+      priorTurns
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
@@ -206,13 +209,16 @@ function getNextAction(session) {
     const uncritiqued = otherModels.filter(m => !critiquesThisPass.some(t => t.model === m));
 
     if (uncritiqued.length > 0) {
+      // Chain: include ALL prior turns this round so each model sees the full discussion
+      const priorTurns = turns.filter(t => t.round === currentPass);
       const prompt = buildCritiquePrompt(
         session.prompt,
-        turns.find(t => t.round === currentPass && (t.role === 'initial' || t.role === 'revision'))?.modelName || MODEL_NAMES[starterModel],
-        turns.find(t => t.round === currentPass && (t.role === 'initial' || t.role === 'revision'))?.content || '',
+        '',
+        '',
         currentPass,
         passes,
-        session.directives
+        session.directives,
+        priorTurns
       );
       return { done: false, model: uncritiqued[0], step: 'critique', pass: currentPass, prompt };
     }
@@ -235,13 +241,15 @@ function getNextAction(session) {
   }
 
   if (currentStep === 'revision') {
+    const priorTurns = turns.filter(t => t.round === currentPass);
     const prompt = buildCritiquePrompt(
       session.prompt,
       MODEL_NAMES[session.currentModel],
       turns[turns.length - 1].content,
       currentPass,
       passes,
-      session.directives
+      session.directives,
+      priorTurns
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
