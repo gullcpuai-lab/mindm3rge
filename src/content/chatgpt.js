@@ -18,7 +18,10 @@ const SELECTORS = {
     '.message-content',
   ],
   stopButton: [
-    'button[aria-label="Stop generating"]', 'button[data-testid="stop-button"]',
+    'button[data-testid="stop-button"]',
+    'button[aria-label="Stop streaming"]',
+    'button[aria-label="Stop generating"]',
+    'button[aria-label*="Stop"]',
   ],
   fileInput: [
     '#upload-files', '#upload-photos', 'input[type="file"]',
