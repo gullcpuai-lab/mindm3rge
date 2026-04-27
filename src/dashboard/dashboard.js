@@ -374,7 +374,7 @@ document.getElementById('export-btn')?.addEventListener('click', async () => {
   const s = status.session;
   let md = `# MindM3rge Discussion\n\n**Prompt:** ${s.originalPrompt || s.prompt}\n\n`;
   md += `**Models:** ${s.modelOrder.map(m => MODEL_NAMES[m]).join(', ')}\n`;
-  md += `**Passes:** ${s.pass-btnes}\n\n---\n\n`;
+  md += `**Passes:** ${s.passes}\n\n---\n\n`;
 
   for (const t of s.turns) {
     md += `## ${t.modelName} — ${t.role} (Round ${t.round})\n\n${t.content}\n\n---\n\n`;
