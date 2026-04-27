@@ -108,9 +108,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const responses = findAll('response');
     if (responses.length > 0) {
       const text = responses[responses.length - 1].innerText || responses[responses.length - 1].textContent;
+      const fullResponse = text + captureArtifacts();
       lastResponseText = text;
       isWaitingForResponse = false;
-      sendResponse({ response: text });
+      sendResponse({ response: fullResponse });
     } else {
       sendResponse({ response: null });
     }
@@ -235,12 +236,16 @@ function watchForResponse() {
       if (stableCount >= 5) {
         // Response is stable — capture it
         clearInterval(checkInterval);
+
+        // Also capture any artifact content (files Claude generated)
+        const fullResponse = text + captureArtifacts();
+
         lastResponseText = text;
         isWaitingForResponse = false;
 
         chrome.runtime.sendMessage({
           type: 'RESPONSE_CAPTURED',
-          data: { model: 'claude', response: text },
+          data: { model: 'claude', response: fullResponse },
         });
       }
     }
@@ -256,10 +261,11 @@ function watchForResponse() {
       if (responses.length > 0) {
         const text = responses[responses.length - 1].innerText || '';
         if (text.length > 10 && text !== lastResponseText) {
+          const fullResponse = text + captureArtifacts();
           lastResponseText = text;
           chrome.runtime.sendMessage({
             type: 'RESPONSE_CAPTURED',
-            data: { model: 'claude', response: text },
+            data: { model: 'claude', response: fullResponse },
           });
           return;
         }
@@ -267,6 +273,42 @@ function watchForResponse() {
       reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
   }, 300000);
+}
+
+function captureArtifacts() {
+  // Claude creates "artifacts" — downloadable files shown inline in the response.
+  // These contain detailed analysis that isn't in the visible response text.
+  // Try multiple selectors for artifact content.
+  const artifactSelectors = [
+    // Artifact preview/content areas
+    '[data-testid="artifact-content"]',
+    '.artifact-content',
+    '.code-block__content',
+    'pre code',
+    // Artifact containers with titles
+    '[class*="artifact"]',
+  ];
+
+  let artifactText = '';
+
+  for (const sel of artifactSelectors) {
+    const els = document.querySelectorAll(sel);
+    if (els.length === 0) continue;
+
+    for (const el of els) {
+      const text = el.innerText || el.textContent || '';
+      // Only capture substantial content that's not already in the response
+      if (text.length > 100) {
+        // Try to get the artifact title
+        const titleEl = el.closest('[class*="artifact"]')?.querySelector('[class*="title"], [class*="name"], h1, h2, h3');
+        const title = titleEl ? titleEl.innerText : 'Generated Document';
+        artifactText += `\n\n--- ARTIFACT: ${title} ---\n${text}\n--- END ARTIFACT ---`;
+      }
+    }
+    if (artifactText) break;  // Found artifacts, stop searching
+  }
+
+  return artifactText;
 }
 
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', model: 'claude' });

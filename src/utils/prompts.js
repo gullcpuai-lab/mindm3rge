@@ -24,6 +24,8 @@ export function buildCritiquePrompt(originalPrompt, previousModelName, previousR
 
   return `You are participating in a multi-model validation process (Round ${roundNumber}/${totalRounds}).
 
+IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE analysis directly in your response text. Everything must be readable in the chat — nothing hidden in attachments.
+
 ORIGINAL USER PROMPT:
 ${originalPrompt}
 ${discussionBlock}${goalBlock}${directiveBlock}
@@ -44,6 +46,8 @@ export function buildRevisionPrompt(originalPrompt, modelName, originalResponse,
   ).join('\n\n');
 
   return `You are ${modelName}. You previously provided a response to a prompt, and other AI models have critiqued your answer.
+
+IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE response directly in the chat text.
 
 ORIGINAL PROMPT:
 ${originalPrompt}
@@ -68,6 +72,8 @@ export function buildSynthesisPrompt(originalPrompt, allTurns) {
   ).join('\n\n');
 
   return `You are synthesizing a multi-model discussion into a final answer.
+
+IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE synthesis directly in the chat text.
 
 ORIGINAL PROMPT:
 ${originalPrompt}
