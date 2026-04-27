@@ -396,8 +396,8 @@
     .wait-btn .tip {
       display: none; position: absolute; bottom: calc(100% + 8px); left: 50%;
       transform: translateX(-50%); background: #1a1425; color: #b8b0c8;
-      font-size: 11px; font-weight: 400; padding: 6px 10px; border-radius: 6px;
-      border: 1px solid rgba(255,255,255,0.1); white-space: nowrap;
+      font-size: 11px; font-weight: 400; padding: 8px 12px; border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.1); white-space: normal; width: 220px; line-height: 1.5;
       box-shadow: 0 4px 12px rgba(0,0,0,0.4); pointer-events: none; z-index: 10;
     }
     .wait-btn .tip::after {
@@ -890,10 +890,10 @@
               <div class="d"><span></span><span></span><span></span></div>
               <span id="waiting-text">Waiting for Claude...</span>
               <div class="waiting-btns">
-                <button class="wait-btn capture" id="capture-btn"><span class="tip">Grab the current response from this model's tab</span>Capture</button>
-                <button class="wait-btn paste" id="paste-btn"><span class="tip">Copy-paste a response or artifact manually</span>Paste</button>
-                <button class="wait-btn retry" id="retry-model-btn"><span class="tip">Open a fresh chat and re-send the prompt</span>Retry</button>
-                <button class="wait-btn skip" id="skip-btn"><span class="tip">Skip this model and move to the next one</span>Skip</button>
+                <button class="wait-btn capture" id="capture-btn"><span class="tip">Use when the model has answered but MindM3rge didn't detect it. Grabs whatever response is currently visible on the model's page.</span>Capture</button>
+                <button class="wait-btn paste" id="paste-btn"><span class="tip">Use when the model created a downloadable file or artifact. Copy the content from the model and paste it here so the other models can see it.</span>Paste</button>
+                <button class="wait-btn retry" id="retry-model-btn"><span class="tip">Use when the model errored out or gave a bad response. Opens a fresh chat and re-sends the same prompt with the full discussion context.</span>Retry</button>
+                <button class="wait-btn skip" id="skip-btn"><span class="tip">Use when a model is stuck or unresponsive. Skips this model and continues the discussion with the remaining models.</span>Skip</button>
               </div>
             </div>
             <!-- Paste Modal -->
