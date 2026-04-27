@@ -290,6 +290,28 @@ document.getElementById('capture-btn')?.addEventListener('click', async () => {
   setTimeout(() => { btn.textContent = 'Capture'; btn.disabled = false; }, 3000);
 });
 
+// Paste response manually
+document.getElementById('paste-btn')?.addEventListener('click', () => {
+  document.getElementById('paste-modal').classList.remove('hidden');
+  document.getElementById('paste-textarea').value = '';
+  document.getElementById('paste-textarea').focus();
+});
+
+document.getElementById('paste-cancel')?.addEventListener('click', () => {
+  document.getElementById('paste-modal').classList.add('hidden');
+});
+
+document.getElementById('paste-submit')?.addEventListener('click', async () => {
+  const text = document.getElementById('paste-textarea').value.trim();
+  if (!text) return;
+  document.getElementById('paste-modal').classList.add('hidden');
+  const btn = document.getElementById('paste-btn');
+  btn.textContent = 'Submitting...';
+  btn.disabled = true;
+  await chrome.runtime.sendMessage({ type: 'MANUAL_RESPONSE', response: text });
+  setTimeout(() => { btn.textContent = 'Paste'; btn.disabled = false; }, 3000);
+});
+
 // Retry current model in a fresh chat
 document.getElementById('retry-model-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('retry-model-btn');

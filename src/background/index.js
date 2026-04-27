@@ -100,6 +100,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleForceCapture().then(sendResponse);
     return true;
   }
+
+  if (message.type === 'MANUAL_RESPONSE') {
+    handleManualResponse(message.response).then(sendResponse);
+    return true;
+  }
 });
 
 async function handleStartSession(data) {
@@ -405,6 +410,18 @@ async function sendToModel(model, prompt, files) {
   if (!sent) {
     DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
   }
+}
+
+async function handleManualResponse(responseText) {
+  const session = await getSession();
+  if (!session || session.status !== 'running') return { ok: false };
+
+  // Feed the pasted response directly into the session as if the model responded
+  await handleResponseCaptured(
+    { model: session.currentModel, response: responseText },
+    null
+  );
+  return { ok: true };
 }
 
 async function handleForceCapture() {
