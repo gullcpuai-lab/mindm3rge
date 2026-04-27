@@ -114,7 +114,8 @@ async function handleStartSession(data) {
   freshChatOpened.clear();
 
   // Build prompts — files are uploaded natively, never injected as text
-  let initialPrompt = prompt;
+  const noArtifacts = '\n\nIMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE response directly in the chat text. Everything must be readable in the conversation — nothing hidden in attachments.';
+  let initialPrompt = prompt + noArtifacts;
 
   // Full prompt with goal context — used in critique/revision prompts
   let fullPrompt = prompt;
