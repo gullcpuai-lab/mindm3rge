@@ -244,10 +244,11 @@ function getNextAction(session) {
 
     // All models critiqued — check if more passes
     if (currentPass < passes) {
-      // Starter model revises
+      // Starter model revises — pass ALL prior turns so it sees full
+      // cross-model history across all prior passes (fixes pass-3+ context reset)
       const critiques = critiquesThisPass.map(t => ({ modelName: t.modelName, content: t.content }));
       const originalResponse = turns.find(t => t.round === currentPass && (t.role === 'initial' || t.role === 'revision'))?.content || '';
-      const prompt = buildRevisionPrompt(session.prompt, MODEL_NAMES[starterModel], originalResponse, critiques);
+      const prompt = buildRevisionPrompt(session.prompt, MODEL_NAMES[starterModel], originalResponse, critiques, turns);
       return { done: false, model: starterModel, step: 'revision', pass: currentPass + 1, prompt };
     }
 

@@ -40,30 +40,40 @@ Review the discussion above. Consider what has been said by all prior participan
 Be rigorous, specific, and constructive. Do not be deferential — if a previous response is wrong, say so clearly and explain why.`;
 }
 
-export function buildRevisionPrompt(originalPrompt, modelName, originalResponse, critiques) {
-  const critiqueText = critiques.map((c, i) =>
-    `--- ${c.modelName}'s Critique ---\n${c.content}`
-  ).join('\n\n');
+export function buildRevisionPrompt(originalPrompt, modelName, originalResponse, critiques, priorTurns) {
+  // Full discussion chain across ALL prior passes, so the starter model sees
+  // the entire cross-model history when revising (not just the current pass's
+  // critiques). Without this, pass 3+ "resets" because each LLM is on a
+  // separate thread and never received the earlier-pass critiques inline.
+  let discussionBlock;
+  if (priorTurns && priorTurns.length > 0) {
+    const chain = priorTurns.map(t =>
+      `--- ${t.modelName} (Round ${t.round}, ${t.role}) ---\n${t.content}`
+    ).join('\n\n');
+    discussionBlock = `FULL DISCUSSION SO FAR (all prior passes):\n${chain}`;
+  } else {
+    // Back-compat path if caller doesn't supply turns
+    const critiqueText = critiques.map(c =>
+      `--- ${c.modelName}'s Critique ---\n${c.content}`
+    ).join('\n\n');
+    discussionBlock = `YOUR ORIGINAL RESPONSE:\n${originalResponse}\n\nCRITIQUES FROM OTHER MODELS:\n${critiqueText}`;
+  }
 
-  return `You are ${modelName}. You previously provided a response to a prompt, and other AI models have critiqued your answer.
+  return `You are ${modelName}. You previously provided a response to a prompt, and other AI models have critiqued your answer across multiple passes.
 
 IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE response directly in the chat text.
 
 ORIGINAL PROMPT:
 ${originalPrompt}
 
-YOUR ORIGINAL RESPONSE:
-${originalResponse}
+${discussionBlock}
 
-CRITIQUES FROM OTHER MODELS:
-${critiqueText}
-
-Please revise your response based on the critiques above. You may:
+Please revise your response based on the FULL discussion above (across all prior passes). You may:
 - Accept valid criticisms and incorporate them
 - Defend parts of your original answer if the critiques are wrong (explain why)
 - Add new insights prompted by the discussion
 
-Provide your revised, improved answer.`;
+Provide your revised, improved answer that takes into account everything every model has said across all prior passes — not just the most recent pass.`;
 }
 
 export function buildSynthesisPrompt(originalPrompt, allTurns) {
