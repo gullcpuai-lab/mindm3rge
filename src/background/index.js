@@ -361,8 +361,20 @@ async function sendToModel(model, prompt, files) {
   if (tabs.length > 0) {
     tab = tabs[0];
     if (needsFreshChat) {
-      // First visit this session — navigate to fresh chat
-      await chrome.tabs.update(tab.id, { url, active: !hideTabs });
+      if (model === 'gemini') {
+        // Gemini is a SPA — navigating tabs.update() to /app while the tab
+        // is already at /app is effectively a no-op (Gemini hides the
+        // conversation ID via History API and restores the last chat from
+        // local state). The reliable way to force a fresh chat is to close
+        // the existing tab and create a new one.
+        await chrome.tabs.remove(tab.id);
+        llmTabIds.delete(tab.id);
+        tab = await chrome.tabs.create({ url, active: !hideTabs });
+        llmTabIds.add(tab.id);
+      } else {
+        // First visit this session — navigate to fresh chat
+        await chrome.tabs.update(tab.id, { url, active: !hideTabs });
+      }
       needsLoad = true;
     } else {
       // Same session, reuse existing chat thread
