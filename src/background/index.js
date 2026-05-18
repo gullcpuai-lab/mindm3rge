@@ -391,7 +391,14 @@ async function sendToModel(model, prompt, files) {
     await new Promise(r => setTimeout(r, 3000));
   }
 
-  freshChatOpened.add(model);
+  // Gemini's chat UI sometimes wedges in a "generating" state on reused
+  // threads — typing manually after a prior round shows a Stop button
+  // instead of Send. Always force a fresh chat for Gemini per round.
+  // The full discussion history is injected into every prompt, so
+  // cross-round context isn't lost.
+  if (model !== 'gemini') {
+    freshChatOpened.add(model);
+  }
 
   // Upload files only on first visit (fresh chat) — subsequent turns reuse the chat
   const filesToSend = (needsFreshChat && files && files.length > 0) ? files : null;
