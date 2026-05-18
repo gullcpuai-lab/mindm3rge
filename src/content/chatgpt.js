@@ -225,45 +225,84 @@ function injectPrompt(prompt) {
 }
 
 function watchForResponse() {
-  const responseCountAtStart = findAll('response').length;
-  let stableText = '';
-  let stableCount = 0;
+  // Hidden-tab Chrome throttles setInterval/setTimeout. Without observing
+  // DOM mutations directly, a ChatGPT response can finish in a hidden tab
+  // and nothing captures it until the user manually focuses the tab —
+  // at which point the throttle lifts and the next interval tick fires.
+  // Fix: use MutationObserver (which fires regardless of tab visibility)
+  // to drive the same stability check the timer drives.
 
-  const checkInterval = setInterval(() => {
+  const responseCountAtStart = findAll('response').length;
+  let lastTextSeen = '';
+  let lastChangeTime = Date.now();
+  let stopSeen = false;
+  let captured = false;
+
+  const STABILITY_MS = 5000;
+
+  function checkAndCapture() {
+    if (captured) return;
+
     const stopBtn = find('stopButton').el;
-    if (stopBtn) { stableCount = 0; return; }
+    if (stopBtn) {
+      stopSeen = true;
+      lastChangeTime = Date.now(); // still generating — reset stability
+      return;
+    }
 
     const responses = findAll('response');
     if (responses.length === 0) return;
 
     const lastResponse = responses[responses.length - 1];
     const text = lastResponse.innerText || lastResponse.textContent;
+    if (!text || text.length <= 10) return;
+
     const isNew = responses.length > responseCountAtStart;
-    const isChanged = text && text !== lastResponseText && text.length > 10;
+    const isChanged = text !== lastResponseText;
+    if (!isNew && !isChanged) return;
 
-    if ((isNew || isChanged) && text && text.length > 10) {
-      if (text === stableText) {
-        stableCount++;
-      } else {
-        stableText = text;
-        stableCount = 1;
-      }
-
-      if (stableCount >= 5) {
-        clearInterval(checkInterval);
-        lastResponseText = text;
-        isWaitingForResponse = false;
-        chrome.runtime.sendMessage({
-          type: 'RESPONSE_CAPTURED',
-          data: { model: 'chatgpt', response: text },
-        });
-      }
+    if (text !== lastTextSeen) {
+      lastTextSeen = text;
+      lastChangeTime = Date.now();
+      return;
     }
-  }, 1000);
+
+    // Text unchanged + no stop button + enough time elapsed → capture.
+    if (Date.now() - lastChangeTime >= STABILITY_MS) {
+      captured = true;
+      clearInterval(checkInterval);
+      if (observer) observer.disconnect();
+      lastResponseText = text;
+      isWaitingForResponse = false;
+      chrome.runtime.sendMessage({
+        type: 'RESPONSE_CAPTURED',
+        data: { model: 'chatgpt', response: text },
+      });
+    }
+  }
+
+  // Foreground happy path — throttled in hidden tabs but still ticks.
+  const checkInterval = setInterval(checkAndCapture, 1000);
+
+  // Background-tab path: MutationObserver fires regardless of visibility,
+  // so streaming text updates and the streaming-finished signal both
+  // reach us even when the tab isn't focused.
+  let observer = null;
+  try {
+    observer = new MutationObserver(() => checkAndCapture());
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  } catch (e) {
+    DEBUG && console.warn('[MindM3rge] ChatGPT MutationObserver setup failed', e);
+  }
 
   setTimeout(() => {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
+      if (observer) observer.disconnect();
       isWaitingForResponse = false;
       const responses = findAll('response');
       if (responses.length > 0) {
