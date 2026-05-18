@@ -225,30 +225,31 @@ function injectPrompt(prompt) {
 }
 
 function watchForResponse() {
-  // Hidden-tab Chrome throttles setInterval/setTimeout. Without observing
-  // DOM mutations directly, a ChatGPT response can finish in a hidden tab
-  // and nothing captures it until the user manually focuses the tab —
-  // at which point the throttle lifts and the next interval tick fires.
-  // Fix: use MutationObserver (which fires regardless of tab visibility)
-  // to drive the same stability check the timer drives.
+  // Hidden-tab Chrome throttles setInterval/setTimeout aggressively. The
+  // earlier MutationObserver fix solved one half of the problem: now we
+  // see streaming updates in real time even when the tab is hidden. But
+  // there's a second half: AFTER streaming ends, no more mutations fire,
+  // so observer-driven stability checks stop arriving. Capture then has
+  // to wait for the throttled setInterval to tick, which can be a full
+  // minute in heavily throttled tabs.
+  //
+  // Fix: drive the stability check off a debounced setTimeout instead of
+  // polling. Each mutation resets a STABILITY_MS timer. When mutations
+  // stop, the timer fires STABILITY_MS later (even in hidden tabs —
+  // setTimeout still fires, just possibly delayed by throttling) and
+  // captures the current response. No dependence on setInterval cadence.
 
   const responseCountAtStart = findAll('response').length;
-  let lastTextSeen = '';
-  let lastChangeTime = Date.now();
-  let stopSeen = false;
   let captured = false;
+  let stabilityTimer = null;
 
-  const STABILITY_MS = 5000;
+  const STABILITY_MS = 3000;
 
-  function checkAndCapture() {
+  function tryCapture() {
     if (captured) return;
 
     const stopBtn = find('stopButton').el;
-    if (stopBtn) {
-      stopSeen = true;
-      lastChangeTime = Date.now(); // still generating — reset stability
-      return;
-    }
+    if (stopBtn) return; // still generating; next mutation will reschedule
 
     const responses = findAll('response');
     if (responses.length === 0) return;
@@ -261,40 +262,42 @@ function watchForResponse() {
     const isChanged = text !== lastResponseText;
     if (!isNew && !isChanged) return;
 
-    if (text !== lastTextSeen) {
-      lastTextSeen = text;
-      lastChangeTime = Date.now();
-      return;
-    }
-
-    // Text unchanged + no stop button + enough time elapsed → capture.
-    if (Date.now() - lastChangeTime >= STABILITY_MS) {
-      captured = true;
-      clearInterval(checkInterval);
-      if (observer) observer.disconnect();
-      lastResponseText = text;
-      isWaitingForResponse = false;
-      chrome.runtime.sendMessage({
-        type: 'RESPONSE_CAPTURED',
-        data: { model: 'chatgpt', response: text },
-      });
-    }
+    captured = true;
+    clearInterval(checkInterval);
+    clearTimeout(stabilityTimer);
+    if (observer) observer.disconnect();
+    lastResponseText = text;
+    isWaitingForResponse = false;
+    chrome.runtime.sendMessage({
+      type: 'RESPONSE_CAPTURED',
+      data: { model: 'chatgpt', response: text },
+    });
   }
 
-  // Foreground happy path — throttled in hidden tabs but still ticks.
-  const checkInterval = setInterval(checkAndCapture, 1000);
+  function resetStabilityTimer() {
+    if (captured) return;
+    if (stabilityTimer) clearTimeout(stabilityTimer);
+    stabilityTimer = setTimeout(tryCapture, STABILITY_MS);
+  }
 
-  // Background-tab path: MutationObserver fires regardless of visibility,
-  // so streaming text updates and the streaming-finished signal both
-  // reach us even when the tab isn't focused.
+  // Backup poll — fires when mutations don't (e.g., very rare cases where
+  // the response area is populated before the observer is even installed).
+  const checkInterval = setInterval(tryCapture, 1000);
+
+  // Primary path: MutationObserver runs regardless of tab visibility.
+  // Each mutation re-arms the stability timer. When mutations stop for
+  // STABILITY_MS, the timer fires and we capture.
   let observer = null;
   try {
-    observer = new MutationObserver(() => checkAndCapture());
+    observer = new MutationObserver(resetStabilityTimer);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
       characterData: true,
     });
+    // Arm the timer immediately so a fast response that's already finished
+    // before the observer fires still gets captured via the first tick.
+    resetStabilityTimer();
   } catch (e) {
     DEBUG && console.warn('[MindM3rge] ChatGPT MutationObserver setup failed', e);
   }
@@ -302,6 +305,7 @@ function watchForResponse() {
   setTimeout(() => {
     if (isWaitingForResponse) {
       clearInterval(checkInterval);
+      clearTimeout(stabilityTimer);
       if (observer) observer.disconnect();
       isWaitingForResponse = false;
       const responses = findAll('response');
