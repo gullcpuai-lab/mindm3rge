@@ -232,6 +232,26 @@ document.getElementById('toggle-tabs-btn').addEventListener('click', async () =>
 });
 
 // Start session
+// Clear the rendered discussion UI back to an empty state. Called at the
+// start of every new session (and by the New Session button) so the prior
+// session's turn cards, synthesis, and progress don't bleed into a fresh
+// run. Without this, lastTurnCount keeps the prior session's count and
+// updateUI's "if (session.turns.length > lastTurnCount)" guard silently
+// skips rendering the early turns of the new session.
+function resetDiscussionUI() {
+  document.getElementById('discussion-feed').innerHTML = '';
+  document.getElementById('synthesis-card').classList.add('hidden');
+  document.getElementById('action-buttons').style.display = 'none';
+  document.getElementById('waiting-indicator').classList.add('hidden');
+  const pf = document.getElementById('progress-fill');
+  if (pf) pf.style.width = '0%';
+  const tc = document.getElementById('turn-count');
+  if (tc) tc.textContent = '0';
+  const pc = document.getElementById('pass-current');
+  if (pc) pc.textContent = '1';
+  lastTurnCount = 0;
+}
+
 document.getElementById('start-btn').addEventListener('click', async () => {
   const prompt = document.getElementById('prompt-input').value.trim();
   if (!prompt) {
@@ -241,6 +261,9 @@ document.getElementById('start-btn').addEventListener('click', async () => {
 
   document.getElementById('start-btn').disabled = true;
   document.getElementById('start-btn').textContent = 'Starting...';
+
+  // Clear any prior discussion's rendered state before the new session begins.
+  resetDiscussionUI();
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -339,14 +362,11 @@ document.getElementById('cancel-btn')?.addEventListener('click', async () => {
   stopPolling();
 });
 
-// New session (full reset)
+// New session (full reset — also clears the prompt input and uploaded files)
 document.getElementById('new-btn')?.addEventListener('click', () => {
   document.getElementById('setup-section').classList.remove('hidden');
   document.getElementById('discussion-section').classList.add('hidden');
-  document.getElementById('discussion-feed').innerHTML = '';
-  document.getElementById('synthesis-card').classList.add('hidden');
-  document.getElementById('action-buttons').style.display = 'none';
-  document.getElementById('waiting-indicator').classList.add('hidden');
+  resetDiscussionUI();
   document.getElementById('start-btn').disabled = false;
   document.getElementById('start-btn').textContent = 'Start Discussion';
   document.getElementById('prompt-input').value = '';
