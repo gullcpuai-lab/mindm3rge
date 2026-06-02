@@ -14,7 +14,21 @@ const SELECTORS = {
     'form button[type="submit"]',
   ],
   response: [
-    '[data-message-author-role="assistant"]', '.agent-turn .markdown',
+    // ChatGPT renders the assistant turn as a container with web-search
+    // citation chips, file-reference badges, thinking summaries, action
+    // buttons, AND the actual prose. Selecting the whole container and
+    // calling .innerText concatenates all of those — yielding garbage
+    // like "Farley_COA7_8_FINAL_v3 / Justia Law / Supreme Court of
+    // California". Target the markdown body specifically.
+    '[data-message-author-role="assistant"] .markdown',
+    '[data-message-author-role="assistant"] [data-message-content]',
+    '[data-message-author-role="assistant"] .prose',
+    '.agent-turn .markdown',
+    '.markdown.prose',
+    // Last-resort container fallback — keeps capture working if ChatGPT
+    // restructures the DOM and removes .markdown. May still pick up
+    // citation chips when this path is hit.
+    '[data-message-author-role="assistant"]',
     '.message-content',
   ],
   stopButton: [
