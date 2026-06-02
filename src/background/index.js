@@ -424,7 +424,18 @@ async function sendToModel(model, prompt, files) {
   // instead of Send. Always force a fresh chat for Gemini per round.
   // The full discussion history is injected into every prompt, so
   // cross-round context isn't lost.
-  if (model !== 'gemini') {
+  //
+  // ChatGPT is added to the always-fresh list in v0.5.2 — reusing the
+  // chat across rounds means multiple assistant turns accumulate in
+  // the DOM, each with its own Copy response button. The v0.5.1 copy-
+  // button locator picks the LAST one in document order, which is
+  // correct ONCE the new round's toolbar has rendered — but during the
+  // brief window between "new round's prose visible" and "new round's
+  // toolbar exists," the locator would return the PRIOR round's button
+  // and capture the prior round's text again. Always-fresh chat
+  // eliminates that race entirely: round N's chat has exactly one
+  // assistant turn and exactly one copy button.
+  if (model !== 'gemini' && model !== 'chatgpt') {
     freshChatOpened.add(model);
   }
 
