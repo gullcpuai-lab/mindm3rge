@@ -409,6 +409,203 @@ document.getElementById('export-btn')?.addEventListener('click', async () => {
   URL.revokeObjectURL(url);
 });
 
+// ─── PDF Export Helpers ─────────────────────────────────────────────────
+// Two flavors:
+//   1) Responses-only PDF: the synthesis the user reads, round-by-round
+//   2) Prompts + Responses PDF: shows the exact prompt sent to each model
+//      alongside its response — proves the conversation chain is being
+//      passed between models round to round (vs. each model receiving the
+//      original prompt cold each time).
+// Chrome extensions can't directly write a PDF without bundling a library
+// (jsPDF, pdfmake, etc., 100KB+). The cleaner approach: build an HTML
+// document styled with @media print and trigger window.print() — the user
+// gets the native browser "Save as PDF" dialog. Zero extra deps, native
+// rendering, and the user controls the file destination.
+
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function roleLabel(role) {
+  return {
+    initial: 'Initial Answer',
+    critique: 'Critique',
+    revision: 'Revision',
+    synthesis: 'Final Synthesis',
+  }[role] || role;
+}
+
+function buildPdfHtml({ title, subtitle, prompt, models, passes, blocks, sessionId }) {
+  // Generated PDF window — we open this in a new tab and immediately
+  // trigger window.print(). Print-specific CSS keeps the output clean
+  // when the user saves to PDF.
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${escapeHtml(title)}</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    background: #fff; color: #1e293b; margin: 0; padding: 36px 40px;
+    -webkit-font-smoothing: antialiased; line-height: 1.55; font-size: 11.5pt; }
+  h1 { font-size: 22pt; color: #0f172a; margin: 0 0 6px 0; letter-spacing: -0.3px; }
+  h2 { font-size: 13pt; color: #1e293b; margin: 22px 0 8px 0;
+    border-bottom: 1.5px solid #0f172a; padding-bottom: 4px; }
+  .sub { color: #64748b; font-size: 10.5pt; margin-bottom: 14px; }
+  .meta { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 10px 14px; font-size: 10pt; color: #334155; margin-bottom: 24px; }
+  .meta b { color: #0f172a; }
+  .meta-row { margin: 3px 0; }
+  .prompt-box { background: #fef3c7; border-left: 3px solid #b45309;
+    padding: 10px 14px; margin: 10px 0 14px 0; font-size: 10.5pt;
+    color: #4a2c0b; white-space: pre-wrap; word-wrap: break-word; }
+  .prompt-box strong { color: #92400e; display: block; margin-bottom: 4px;
+    font-size: 10pt; text-transform: uppercase; letter-spacing: 0.5px; }
+  .response-box { background: #f0fdf4; border-left: 3px solid #16a34a;
+    padding: 10px 14px; margin: 0 0 22px 0; font-size: 11pt;
+    color: #064e3b; white-space: pre-wrap; word-wrap: break-word; }
+  .response-box strong { color: #15803d; display: block; margin-bottom: 4px;
+    font-size: 10pt; text-transform: uppercase; letter-spacing: 0.5px; }
+  .turn { page-break-inside: avoid; margin-bottom: 6px; }
+  .turn-header { font-weight: 700; color: #0f172a; font-size: 11.5pt;
+    margin: 16px 0 6px 0; padding-bottom: 4px;
+    border-bottom: 1px dashed #cbd5e1; }
+  .turn-header .pill { display: inline-block; background: #0f172a; color: #fff;
+    padding: 2px 8px; border-radius: 3px; font-size: 9pt; margin-left: 8px;
+    font-weight: 600; letter-spacing: 0.4px; }
+  .footer { margin-top: 32px; padding-top: 14px; border-top: 1px solid #cbd5e1;
+    color: #64748b; font-size: 9pt; }
+  @media print {
+    body { padding: 18px 20px; }
+    .no-print { display: none !important; }
+    h2 { page-break-after: avoid; }
+    .turn { page-break-inside: avoid; }
+  }
+  .print-bar { background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px;
+    padding: 8px 14px; margin: -8px 0 18px 0; font-size: 10pt; color: #334155;
+    display: flex; justify-content: space-between; align-items: center; }
+  .print-bar button { background: #0f172a; color: #fff; border: none;
+    padding: 6px 14px; border-radius: 4px; font-size: 10pt; cursor: pointer;
+    font-family: inherit; }
+</style>
+</head>
+<body>
+  <div class="print-bar no-print">
+    <span>Use your browser&rsquo;s <b>Save as PDF</b> in the print dialog to save this report.</span>
+    <button onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <h1>${escapeHtml(title)}</h1>
+  <div class="sub">${escapeHtml(subtitle)}</div>
+  <div class="meta">
+    <div class="meta-row"><b>Session ID:</b> ${escapeHtml(sessionId)}</div>
+    <div class="meta-row"><b>Models:</b> ${escapeHtml(models)}</div>
+    <div class="meta-row"><b>Rounds:</b> ${escapeHtml(String(passes))}</div>
+    <div class="meta-row"><b>Original prompt:</b></div>
+    <div style="white-space:pre-wrap;margin-top:4px;color:#0f172a;font-size:10.5pt;">${escapeHtml(prompt)}</div>
+  </div>
+  ${blocks}
+  <div class="footer">
+    Generated by MindM3rge &mdash; ${new Date().toLocaleString()}
+  </div>
+  <script>
+    // Auto-open the print dialog so the user can immediately save as PDF.
+    // The print-bar button remains as a fallback if the dialog is dismissed.
+    setTimeout(() => { try { window.print(); } catch (e) {} }, 250);
+  </script>
+</body></html>`;
+}
+
+function buildResponsesOnlyBlocks(turns) {
+  // Group by round so the PDF reads as round-by-round synthesis
+  const byRound = new Map();
+  for (const t of turns) {
+    const r = t.round || 1;
+    if (!byRound.has(r)) byRound.set(r, []);
+    byRound.get(r).push(t);
+  }
+  const rounds = [...byRound.keys()].sort((a, b) => a - b);
+  let html = '';
+  for (const r of rounds) {
+    html += `<h2>Round ${r}</h2>`;
+    for (const t of byRound.get(r)) {
+      html += `<div class="turn">
+        <div class="turn-header">${escapeHtml(t.modelName || t.model)}
+          <span class="pill">${escapeHtml(roleLabel(t.role))}</span></div>
+        <div class="response-box"><strong>Response</strong>${escapeHtml(t.content)}</div>
+      </div>`;
+    }
+  }
+  return html;
+}
+
+function buildPromptsAndResponsesBlocks(turns) {
+  const byRound = new Map();
+  for (const t of turns) {
+    const r = t.round || 1;
+    if (!byRound.has(r)) byRound.set(r, []);
+    byRound.get(r).push(t);
+  }
+  const rounds = [...byRound.keys()].sort((a, b) => a - b);
+  let html = '';
+  for (const r of rounds) {
+    html += `<h2>Round ${r}</h2>`;
+    for (const t of byRound.get(r)) {
+      const prompt = t.promptSent
+        ? escapeHtml(t.promptSent)
+        : '<em style="color:#94a3b8;">[Prompt was not captured for this turn &mdash; this turn predates the prompt-capture instrumentation in the extension.]</em>';
+      html += `<div class="turn">
+        <div class="turn-header">${escapeHtml(t.modelName || t.model)}
+          <span class="pill">${escapeHtml(roleLabel(t.role))}</span></div>
+        <div class="prompt-box"><strong>Prompt sent to ${escapeHtml(t.modelName || t.model)}</strong>${prompt}</div>
+        <div class="response-box"><strong>${escapeHtml(t.modelName || t.model)} response</strong>${escapeHtml(t.content)}</div>
+      </div>`;
+    }
+  }
+  return html;
+}
+
+async function exportPdf(kind) {
+  const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
+  if (!status?.session) return;
+  const s = status.session;
+  const models = s.modelOrder.map(m => MODEL_NAMES[m] || m).join(', ');
+  const prompt = s.originalPrompt || s.prompt || '(none)';
+  const sessionId = s.id || '(unknown)';
+  const title = kind === 'full'
+    ? 'MindM3rge — Prompts and Responses'
+    : 'MindM3rge — Round-by-Round Responses';
+  const subtitle = kind === 'full'
+    ? 'Every prompt sent to each model + each model&rsquo;s response, by round'
+    : 'Each model&rsquo;s response by round';
+  const blocks = kind === 'full'
+    ? buildPromptsAndResponsesBlocks(s.turns)
+    : buildResponsesOnlyBlocks(s.turns);
+
+  const html = buildPdfHtml({ title, subtitle, prompt, models, passes: s.passes, blocks, sessionId });
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  // Open in a new tab so the user gets the native browser print-to-PDF flow.
+  // setTimeout in the generated HTML triggers window.print() automatically.
+  const win = window.open(url, '_blank');
+  if (!win) {
+    // Pop-up blocked — fall back to download
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mindmerge-${kind}-${sessionId}.html`;
+    a.click();
+  }
+  // Revoke after a short delay so the new tab has time to load
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+document.getElementById('export-responses-pdf-btn')?.addEventListener('click', () => exportPdf('responses'));
+document.getElementById('export-full-pdf-btn')?.addEventListener('click', () => exportPdf('full'));
+
 // Polling
 let pollInterval = null;
 let lastTurnCount = 0;

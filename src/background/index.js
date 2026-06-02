@@ -146,6 +146,9 @@ async function handleStartSession(data) {
     createdAt: new Date().toISOString(),
   };
 
+  // Track the prompt actually sent so the dashboard can show it later.
+  session.lastPromptSent = initialPrompt;
+
   await saveSession(session);
 
   // Send just the user's question to the starter model (no meta-instructions)
@@ -160,13 +163,16 @@ async function handleResponseCaptured(data, tab) {
 
   if (!session || session.status !== 'running') return { ok: false };
 
-  // Record this turn
+  // Record this turn — including the prompt that was actually sent to this
+  // model, so the dashboard can render Prompts+Responses exports and prove
+  // the chain of context is being passed between models round-to-round.
   session.turns.push({
     model,
     modelName: MODEL_NAMES[model],
     role: session.currentStep,
     round: session.currentPass,
     content: response,
+    promptSent: session.lastPromptSent || session.prompt,
     timestamp: new Date().toISOString(),
   });
 
@@ -198,6 +204,7 @@ async function handleResponseCaptured(data, tab) {
   session.currentStep = nextAction.step;
   session.currentModel = nextAction.model;
   session.currentPass = nextAction.pass;
+  session.lastPromptSent = nextAction.prompt;
   await saveSession(session);
 
   // Send the next prompt to the next model (with files if first time)
@@ -482,6 +489,10 @@ async function handleRetryModel() {
   const nextAction = getNextAction(session);
   const prompt = nextAction.done ? session.prompt : nextAction.prompt;
 
+  // Track the retried prompt so the dashboard can show it.
+  session.lastPromptSent = prompt;
+  await saveSession(session);
+
   // Send to the same model in a fresh chat
   await sendToModel(model, prompt, session.files);
   return { ok: true, model };
@@ -516,6 +527,7 @@ async function handleSkipModel() {
   session.currentStep = nextAction.step;
   session.currentModel = nextAction.model;
   session.currentPass = nextAction.pass;
+  session.lastPromptSent = nextAction.prompt;
   await saveSession(session);
 
   await sendToModel(nextAction.model, nextAction.prompt, session.files);
