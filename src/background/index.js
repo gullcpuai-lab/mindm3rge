@@ -105,6 +105,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleManualResponse(message.response).then(sendResponse);
     return true;
   }
+
+  if (message.type === 'EDIT_TURN') {
+    // Dashboard sent a corrected response for an already-captured turn.
+    // Update session.turns[turnIndex].content so future prompts in the
+    // chain pick up the corrected text. Does NOT retroactively change
+    // prompts already sent to downstream models — that ship has sailed.
+    handleEditTurn(message.turnIndex, message.content).then(sendResponse);
+    return true;
+  }
 });
 
 async function handleStartSession(data) {
@@ -438,6 +447,31 @@ async function sendToModel(model, prompt, files) {
   if (!sent) {
     DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
   }
+}
+
+async function handleEditTurn(turnIndex, newContent) {
+  // Validates and applies a user edit to a captured turn. Saves to
+  // storage so subsequent prompt-builder calls (buildCritiquePrompt /
+  // buildRevisionPrompt / buildSynthesisPrompt) read the corrected
+  // text. The session does NOT need to be 'running' — the user can
+  // also edit turns of a 'complete' session for export purposes.
+  if (typeof turnIndex !== 'number' || !Number.isInteger(turnIndex)) {
+    return { ok: false, error: 'Invalid turnIndex' };
+  }
+  if (typeof newContent !== 'string') {
+    return { ok: false, error: 'Invalid content' };
+  }
+  const session = await getSession();
+  if (!session) return { ok: false, error: 'No active session' };
+  if (turnIndex < 0 || turnIndex >= session.turns.length) {
+    return { ok: false, error: 'turnIndex out of range' };
+  }
+  const turn = session.turns[turnIndex];
+  turn.content = newContent;
+  turn.userEdited = true;
+  turn.editedAt = new Date().toISOString();
+  await saveSession(session);
+  return { ok: true, turnIndex, length: newContent.length };
 }
 
 async function handleManualResponse(responseText) {

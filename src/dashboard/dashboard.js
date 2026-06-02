@@ -634,7 +634,9 @@ function updateUI(session) {
     const feed = document.getElementById('discussion-feed');
     for (let i = lastTurnCount; i < session.turns.length; i++) {
       const turn = session.turns[i];
-      feed.appendChild(createTurnCard(turn));
+      // Pass the actual array index so the edit handler can target
+      // the right turn when sending EDIT_TURN to the background.
+      feed.appendChild(createTurnCard(turn, i));
     }
     lastTurnCount = session.turns.length;
 
@@ -734,9 +736,12 @@ const MODEL_ICONS = {
   gemini: `<svg width="18" height="18" viewBox="0 0 28 28"><path d="M14 0C14 7.73 7.73 14 0 14C7.73 14 14 20.27 14 28C14 20.27 20.27 14 28 14C20.27 14 14 7.73 14 0Z" fill="url(#gem-t)"/><defs><linearGradient id="gem-t" x1="0" y1="0" x2="28" y2="28"><stop offset="0%" stop-color="#4285F4"/><stop offset="33%" stop-color="#EA4335"/><stop offset="66%" stop-color="#FBBC05"/><stop offset="100%" stop-color="#34A853"/></linearGradient></defs></svg>`,
 };
 
-function createTurnCard(turn) {
+function createTurnCard(turn, turnIndex) {
   const card = document.createElement('div');
   card.className = `turn ${turn.model}`;
+  // Stash the index so handlers can find it later (button event listeners
+  // can also use closures, but data-* is the simplest read path).
+  if (typeof turnIndex === 'number') card.dataset.turnIndex = String(turnIndex);
 
   const roleLabels = {
     initial: 'Initial Response',
@@ -761,6 +766,7 @@ function createTurnCard(turn) {
         <div class="turn-actions">
           <button class="turn-act pin-btn" title="Pin" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 2h6l-1.5 5.5L17 11H7l3.5-3.5z"/></svg></button>
           <button class="turn-act ann-btn" title="Annotate" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+          <button class="turn-act edit-btn" title="Edit response — useful if MindM3rge captured the response incorrectly. Edits propagate to all subsequent prompts in the chain." data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
           <button class="turn-act retry" title="Retry this turn" data-turn="${turnId}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg></button>
         </div>
       </div>
@@ -817,6 +823,113 @@ function createTurnCard(turn) {
       await chrome.runtime.sendMessage({ type: 'RETRY_TURN', turnIndex: turn.index });
     } catch {}
     setTimeout(() => retryBtn.classList.remove('retrying'), 3000);
+  });
+
+  // Edit button — inline textarea so the user can override the captured
+  // response live. Useful when MindM3rge's content-script capture grabs
+  // a partial / wrong response. After saving, the corrected text replaces
+  // session.turns[turnIndex].content in storage, and is what gets baked
+  // into every subsequent buildCritiquePrompt / buildRevisionPrompt /
+  // buildSynthesisPrompt call by getNextAction(). Edits do NOT retro-
+  // actively change prompts already sent to downstream models — only
+  // future prompts.
+  card.querySelector('.edit-btn').addEventListener('click', () => {
+    const contentEl = card.querySelector('.turn-content');
+    const bodyEl = card.querySelector('.turn-body');
+    // Toggle off if already editing
+    if (card.classList.contains('editing')) {
+      const existing = contentEl.querySelector('.turn-edit-wrap');
+      if (existing) existing.remove();
+      bodyEl.style.display = '';
+      card.classList.remove('editing');
+      return;
+    }
+    card.classList.add('editing');
+    const wrap = document.createElement('div');
+    wrap.className = 'turn-edit-wrap';
+    wrap.style.cssText = 'margin-top:8px;';
+    const ta = document.createElement('textarea');
+    ta.className = 'turn-edit-area';
+    ta.value = turn.content;
+    ta.style.cssText = 'width:100%;min-height:140px;max-height:480px;padding:10px;border:1px solid var(--accent,#7c5cfc);border-radius:6px;background:rgba(124,92,252,0.05);color:var(--text,#f5f5f7);font-family:inherit;font-size:13px;line-height:1.5;resize:vertical;box-sizing:border-box;';
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:11px;color:var(--text2,#86868b);margin:4px 0 8px 2px;';
+    note.textContent = 'Edits propagate to all SUBSEQUENT prompts. Prompts already sent to downstream models are unchanged.';
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:8px;margin-top:6px;';
+    const saveBtn = document.createElement('button');
+    saveBtn.textContent = 'Save edit';
+    saveBtn.style.cssText = 'background:var(--accent,#7c5cfc);color:#fff;border:none;padding:6px 14px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;';
+    const cancelBtn = document.createElement('button');
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.style.cssText = 'background:rgba(255,255,255,0.05);color:var(--text,#f5f5f7);border:1px solid rgba(255,255,255,0.12);padding:6px 14px;border-radius:5px;font-size:12px;cursor:pointer;font-family:inherit;';
+    const status = document.createElement('span');
+    status.style.cssText = 'font-size:11px;color:var(--text2,#86868b);margin-left:8px;align-self:center;';
+
+    const cleanup = () => {
+      wrap.remove();
+      bodyEl.style.display = '';
+      card.classList.remove('editing');
+    };
+
+    cancelBtn.addEventListener('click', cleanup);
+    saveBtn.addEventListener('click', async () => {
+      const newContent = ta.value;
+      // Read the array index off the card dataset — set when the card
+      // was created in the updateUI render loop.
+      const turnIndex = Number(card.dataset.turnIndex);
+      if (!Number.isInteger(turnIndex) || turnIndex < 0) {
+        status.textContent = 'Error: could not determine turn index';
+        return;
+      }
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+      try {
+        const res = await chrome.runtime.sendMessage({
+          type: 'EDIT_TURN',
+          turnIndex,
+          content: newContent,
+        });
+        if (!res?.ok) {
+          status.textContent = res?.error ? `Error: ${res.error}` : 'Save failed';
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save edit';
+          return;
+        }
+        // Update local turn so closure stays accurate
+        turn.content = newContent;
+        // Update the visible body and the data-content search index
+        bodyEl.textContent = newContent;
+        card.dataset.content = newContent;
+        // Mark the card so the user can see it's been edited
+        card.classList.add('user-edited');
+        if (!card.querySelector('.edit-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'edit-badge';
+          badge.textContent = 'edited';
+          badge.style.cssText = 'display:inline-block;background:#7c5cfc;color:#fff;font-size:10px;padding:2px 8px;border-radius:3px;margin-left:6px;font-weight:600;letter-spacing:0.3px;text-transform:uppercase;';
+          card.querySelector('.turn-meta')?.appendChild(badge);
+        }
+        cleanup();
+      } catch (e) {
+        status.textContent = `Error: ${e.message || e}`;
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save edit';
+      }
+    });
+
+    btnRow.appendChild(saveBtn);
+    btnRow.appendChild(cancelBtn);
+    btnRow.appendChild(status);
+    wrap.appendChild(ta);
+    wrap.appendChild(note);
+    wrap.appendChild(btnRow);
+    // Hide the rendered body while editing so the textarea is the source of truth
+    bodyEl.style.display = 'none';
+    contentEl.appendChild(wrap);
+    ta.focus();
+    // Place cursor at end of text for convenience
+    ta.setSelectionRange(ta.value.length, ta.value.length);
   });
 
   return card;
