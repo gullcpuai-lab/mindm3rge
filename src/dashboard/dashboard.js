@@ -422,12 +422,8 @@ document.getElementById('export-btn')?.addEventListener('click', async () => {
 // gets the native browser "Save as PDF" dialog. Zero extra deps, native
 // rendering, and the user controls the file destination.
 
-function escapeHtml(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
+// Note: escapeHtml is already defined later in this file and is hoisted
+// to top of script — reusing the existing helper instead of redeclaring.
 
 function roleLabel(role) {
   return {
