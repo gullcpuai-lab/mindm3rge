@@ -4,6 +4,106 @@ const DEBUG = false;
 let isWaitingForResponse = false;
 let lastResponseText = '';
 
+// v0.5.0 — Copy-response capture path.
+//
+// Rather than scrape the .markdown DOM and try to filter out file-
+// reference buttons / citation pills (which keep changing per model
+// version — GPT-5 used unmarked <button> elements that v0.4.x had to
+// chase), we let ChatGPT's own "Copy response" button do the work.
+//
+// The button click invokes ChatGPT's internal renderer that produces
+// the canonical text representation of the assistant message —
+// markdown formatting, file refs as plain text, citation footnotes.
+// Exactly what the user would get by clicking Copy themselves.
+//
+// We can't read the clipboard from a background-tab content script
+// (the tab needs focus for clipboard reads), so instead we monkey-
+// patch navigator.clipboard.writeText() and document.execCommand('copy')
+// in the page's MAIN world. When ChatGPT's copy code calls writeText,
+// we intercept the text. No clipboard read required.
+let interceptedCopyText = null;
+function injectClipboardInterceptor() {
+  if (document.getElementById('mindmerge-clip-interceptor')) return;
+  // Build the inline script content. The {{ }} doubles unwind to single
+  // braces — this lets us avoid JS template-literal escaping.
+  const code = `
+    (function () {
+      if (window.__mindmergeClipPatched) return;
+      window.__mindmergeClipPatched = true;
+      const post = (text) => {
+        try {
+          window.postMessage({ source: 'mindmerge', type: 'COPY_INTERCEPTED', text }, '*');
+        } catch (e) {}
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          const orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+          navigator.clipboard.writeText = function (text) {
+            post(text);
+            return orig(text);
+          };
+        }
+      } catch (e) {}
+      try {
+        const origExec = document.execCommand.bind(document);
+        document.execCommand = function (cmd, ...rest) {
+          if (cmd === 'copy') {
+            const s = window.getSelection && window.getSelection().toString();
+            if (s) post(s);
+          }
+          return origExec(cmd, ...rest);
+        };
+      } catch (e) {}
+    })();
+  `;
+  const s = document.createElement('script');
+  s.id = 'mindmerge-clip-interceptor';
+  s.textContent = code;
+  (document.head || document.documentElement).appendChild(s);
+  s.remove();
+}
+window.addEventListener('message', (event) => {
+  if (event.source !== window) return;
+  const d = event.data;
+  if (d && d.source === 'mindmerge' && d.type === 'COPY_INTERCEPTED' &&
+      typeof d.text === 'string') {
+    interceptedCopyText = d.text;
+    DEBUG && console.log('[MindM3rge] intercepted copy text, len=' + d.text.length);
+  }
+});
+injectClipboardInterceptor();
+
+// Locate the message-level "Copy response" button for the LAST
+// assistant turn. NOT the per-code-block Copy or per-table Copy.
+function findMessageCopyButton(assistantTurn) {
+  if (!assistantTurn) return null;
+  // Try known selectors in priority order. Action toolbar lives in a
+  // sibling of the main message body, not inside .markdown.
+  const candidates = [
+    'button[data-testid="copy-turn-action-button"]',
+    'button[data-testid$="copy-response"]',
+    'button[aria-label="Copy"]',
+    'button[aria-label="Copy response"]',
+  ];
+  // Look UP from the turn to the parent message wrapper so we can
+  // find the action toolbar that's a sibling of .markdown.
+  const wrap = assistantTurn.parentElement || assistantTurn;
+  for (const sel of candidates) {
+    const els = wrap.querySelectorAll(sel);
+    for (const el of els) {
+      if (el.closest('pre')) continue;     // code block copy — skip
+      // Skip the in-message "Copy table" buttons; those have empty
+      // text in their inner <span>. The message-level copy buttons
+      // typically also have empty inner text but a clear aria-label.
+      const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+      if (aria.includes('table')) continue;
+      if (aria.includes('code')) continue;
+      return el;
+    }
+  }
+  return null;
+}
+
 const SELECTORS = {
   input: [
     '#prompt-textarea', 'div[contenteditable="true"][id="prompt-textarea"]',
@@ -194,15 +294,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ loggedIn: isLoggedIn });
   }
   if (message.type === 'FORCE_CAPTURE') {
-    const responses = findAll('response');
-    if (responses.length > 0) {
-      const text = responses[responses.length - 1].innerText || responses[responses.length - 1].textContent;
+    // Async path — try the copy-response button first, fall back to
+    // .markdown innerText if the button doesn't exist yet or the
+    // intercept fires no data.
+    (async () => {
+      const responses = findAll('response');
+      if (responses.length === 0) {
+        sendResponse({ response: null });
+        return;
+      }
+      const last = responses[responses.length - 1];
+      const copyBtn = findMessageCopyButton(last);
+      if (copyBtn) {
+        interceptedCopyText = null;
+        try { copyBtn.click(); } catch (e) {}
+        await new Promise((r) => setTimeout(r, 250));
+        if (interceptedCopyText) {
+          lastResponseText = interceptedCopyText;
+          isWaitingForResponse = false;
+          sendResponse({ response: interceptedCopyText });
+          return;
+        }
+      }
+      const text = last.innerText || last.textContent;
       lastResponseText = text;
       isWaitingForResponse = false;
       sendResponse({ response: text });
-    } else {
-      sendResponse({ response: null });
-    }
+    })();
+    return true; // keep the channel open for async sendResponse
   }
   return true;
 });
@@ -330,7 +449,7 @@ function watchForResponse() {
 
   const STABILITY_MS = 3000;
 
-  function tryCapture() {
+  async function tryCapture() {
     if (captured) return;
 
     const stopBtn = find('stopButton').el;
@@ -340,42 +459,58 @@ function watchForResponse() {
     if (responses.length === 0) return;
 
     const lastResponse = responses[responses.length - 1];
-    const text = lastResponse.innerText || lastResponse.textContent;
-    if (!text || text.length <= 10) return;
 
-    // Gate on PROSE-only length. ChatGPT renders web-search citations
-    // and file references as inline pills inside .markdown. During the
-    // early streaming phase the model may emit "I [pill_a] [pill_b]"
-    // before the actual analysis arrives. The raw innerText is e.g.
-    // "I\nComplaint Farley (1)\nFarley_COA7_8_FINAL_v3" — passes the
-    // length-10 check but is garbage. Strip the pills, gate on the
-    // remaining prose. If the prose by itself is too short, wait.
-    const { prose, pillTexts } = extractProse(lastResponse);
-    // Prose-only minimum. The user's bug case was "I reviewed both the
-    // existing complaint and the" (~47 chars) followed by 6 unmarked
-    // file-ref buttons — the intro had streamed but the analysis prose
-    // hadn't. 200 is high enough to reject every observed false-positive
-    // case while still capturing legitimately short responses (e.g.
-    // "Yes." is rare from ChatGPT but if a model genuinely produces a
-    // sub-200-char reply the user will see the gate in action and can
-    // hit Edit to override).
-    if (prose.length < 200) return;
-    DEBUG && console.log('[MindM3rge] ChatGPT capture: prose_len=' +
-      prose.length + ' pills=' + pillTexts.length);
+    // Detection of "response is truly done": the message-level copy
+    // button must exist. ChatGPT only renders the action toolbar
+    // (copy / regenerate / like / dislike) AFTER the message is
+    // fully complete — past every tool call, past every streaming
+    // chunk, past every web-search source. This is a far stronger
+    // completion signal than "stop button is gone" because the stop
+    // button can disappear DURING tool calls.
+    const copyBtn = findMessageCopyButton(lastResponse);
+    if (!copyBtn) return; // not done yet — wait
+
+    // Trigger ChatGPT's own copy logic. The page main-world monkey
+    // patch on navigator.clipboard.writeText fires a window.postMessage
+    // we listen for. interceptedCopyText is updated synchronously
+    // from the message handler.
+    interceptedCopyText = null;
+    try { copyBtn.click(); } catch (e) {
+      DEBUG && console.warn('[MindM3rge] copy click failed', e);
+    }
+
+    // Wait briefly for the intercept event to fire. ChatGPT's copy
+    // is synchronous in practice but give it a tick.
+    await new Promise((r) => setTimeout(r, 250));
+
+    let capturedText = interceptedCopyText;
+
+    // Fallback 1: maybe the interceptor wasn't injected in time, or
+    // ChatGPT used a path we didn't patch. Fall back to .markdown
+    // innerText.
+    if (!capturedText) {
+      const text = lastResponse.innerText || lastResponse.textContent;
+      if (!text || text.length <= 10) return;
+      // Apply the older v0.4.5 prose-length gate so we don't capture
+      // the streaming-intro garbage if we end up here.
+      const { prose } = extractProse(lastResponse);
+      if (prose.length < 200) return;
+      capturedText = text;
+    }
 
     const isNew = responses.length > responseCountAtStart;
-    const isChanged = text !== lastResponseText;
+    const isChanged = capturedText !== lastResponseText;
     if (!isNew && !isChanged) return;
 
     captured = true;
     clearInterval(checkInterval);
     clearTimeout(stabilityTimer);
     if (observer) observer.disconnect();
-    lastResponseText = text;
+    lastResponseText = capturedText;
     isWaitingForResponse = false;
     chrome.runtime.sendMessage({
       type: 'RESPONSE_CAPTURED',
-      data: { model: 'chatgpt', response: text },
+      data: { model: 'chatgpt', response: capturedText },
     });
   }
 
