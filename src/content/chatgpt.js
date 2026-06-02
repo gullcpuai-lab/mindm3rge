@@ -302,6 +302,39 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const isLoggedIn = !window.location.href.includes('/auth/login');
     sendResponse({ loggedIn: isLoggedIn });
   }
+  if (message.type === 'DO_CAPTURE_WITH_CLIPBOARD') {
+    // v0.5.3 — the background just focused our tab. Click the copy
+    // button, wait for ChatGPT to populate the clipboard, then read it.
+    // This works (whereas reading clipboard from a background tab
+    // doesn't) because our tab is now the active foreground tab.
+    (async () => {
+      const responses = findAll('response');
+      if (responses.length === 0) { sendResponse({ ok: false, error: 'no response' }); return; }
+      const last = responses[responses.length - 1];
+      const copyBtn = findMessageCopyButton(last);
+      if (!copyBtn) { sendResponse({ ok: false, error: 'no copy button' }); return; }
+      try {
+        copyBtn.click();
+      } catch (e) {
+        sendResponse({ ok: false, error: 'click failed: ' + e.message }); return;
+      }
+      // Wait for clipboard to populate. ChatGPT does navigator.
+      // clipboard.writeText asynchronously; 350ms is plenty.
+      await new Promise((r) => setTimeout(r, 350));
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && text.length > 10) {
+          sendResponse({ ok: true, text });
+        } else {
+          sendResponse({ ok: false, error: 'clipboard empty or tiny: ' + (text?.length || 0) });
+        }
+      } catch (e) {
+        sendResponse({ ok: false, error: 'clipboard.readText failed: ' + e.message });
+      }
+    })();
+    return true; // async sendResponse
+  }
+
   if (message.type === 'FORCE_CAPTURE') {
     // Async path — try the copy-response button first, fall back to
     // .markdown innerText if the button doesn't exist yet or the
@@ -471,24 +504,26 @@ function watchForResponse() {
     let capturedText = null;
     let usedPath = null;
 
-    // PRIMARY PATH: try to find the message-level Copy response button.
-    // Its presence is the strongest "response is fully done" signal —
-    // ChatGPT only renders the action toolbar after the message
-    // completes (past every tool call, past every streaming chunk).
+    // PRIMARY PATH (v0.5.3): ask the background to focus our tab, then
+    // click the Copy response button + read navigator.clipboard.
+    // The focus is the missing ingredient — content scripts can't read
+    // clipboard from background tabs, but if we briefly become the
+    // foreground tab, readText() works. Background restores focus to
+    // the dashboard tab after we return the text.
     const copyBtn = findMessageCopyButton(lastResponse);
 
     if (copyBtn) {
-      // Trigger ChatGPT's own copy logic. The page-world monkey patch
-      // on navigator.clipboard.writeText fires a window.postMessage
-      // back; the listener stores it in interceptedCopyText.
-      interceptedCopyText = null;
-      try { copyBtn.click(); } catch (e) { DEBUG && console.warn('[MindM3rge] copy click failed', e); }
-      await new Promise((r) => setTimeout(r, 250));
-      if (interceptedCopyText && interceptedCopyText.length > 10) {
-        capturedText = interceptedCopyText;
-        usedPath = 'copy-button-intercept';
+      const result = await new Promise((resolve) => {
+        try {
+          chrome.runtime.sendMessage({ type: 'CAPTURE_VIA_FOCUS' }, (r) => resolve(r));
+        } catch (e) { resolve({ ok: false, error: e.message }); }
+      });
+      if (result && result.ok && result.text && result.text.length > 10) {
+        capturedText = result.text;
+        usedPath = 'copy-button-focus-clipboard';
       } else {
-        DEBUG && console.log('[MindM3rge] copy intercept yielded no text (CSP or different copy path), falling back');
+        DEBUG && console.log('[MindM3rge] CAPTURE_VIA_FOCUS failed:', result?.error || 'unknown',
+                              '— falling back to DOM extraction');
       }
     } else {
       DEBUG && console.log('[MindM3rge] no copy button found yet — using DOM fallback if prose is substantial');

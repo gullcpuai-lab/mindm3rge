@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "MindM3rge — AI Multi-Model Validator",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Submit one prompt, have multiple AI models critique and validate each other's reasoning.",
   "permissions": [
     "activeTab",
     "storage",
     "tabs",
     "scripting",
-    "notifications"
+    "notifications",
+    "clipboardRead"
   ],
   "host_permissions": [
     "https://claude.ai/*",

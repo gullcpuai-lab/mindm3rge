@@ -106,6 +106,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'CAPTURE_VIA_FOCUS') {
+    // v0.5.3 — User-suggested approach: briefly switch focus to the
+    // chatgpt tab so the content script can click the Copy response
+    // button AND read navigator.clipboard.readText() (which requires
+    // the tab to be focused). Then restore focus to wherever the user
+    // was. Avoids the entire 'inject a page-world monkey-patch and
+    // hope ChatGPT uses navigator.clipboard' dance from v0.5.0-0.5.2.
+    handleCaptureViaFocus(sender.tab?.id).then(sendResponse);
+    return true;
+  }
+
   if (message.type === 'EDIT_TURN') {
     // Dashboard sent a corrected response for an already-captured turn.
     // Update session.turns[turnIndex].content so future prompts in the
@@ -457,6 +468,43 @@ async function sendToModel(model, prompt, files) {
   }
   if (!sent) {
     DEBUG && console.error(`[MindM3rge] Failed to send prompt to ${model} after 5 attempts`);
+  }
+}
+
+async function handleCaptureViaFocus(chatgptTabId) {
+  if (!chatgptTabId) return { ok: false, error: 'no tab id from sender' };
+  let previouslyActiveTabId = null;
+  let previousWindowId = null;
+  try {
+    // Find what's currently focused so we can restore.
+    const target = await chrome.tabs.get(chatgptTabId);
+    if (!target) return { ok: false, error: 'tab gone' };
+    previousWindowId = target.windowId;
+    const activeTabs = await chrome.tabs.query({ active: true, windowId: target.windowId });
+    if (activeTabs.length > 0 && activeTabs[0].id !== chatgptTabId) {
+      previouslyActiveTabId = activeTabs[0].id;
+    }
+    // Make sure the chatgpt tab's window is focused too — focus is
+    // window-scoped on macOS/Linux.
+    try { await chrome.windows.update(target.windowId, { focused: true }); } catch {}
+    // Focus the chatgpt tab so the page can read clipboard.
+    await chrome.tabs.update(chatgptTabId, { active: true });
+    // Tiny settle wait for focus to register at the OS level.
+    await new Promise((r) => setTimeout(r, 250));
+    // Ask the content script to run the click+read sequence now that
+    // it's the foreground tab.
+    const result = await chrome.tabs.sendMessage(chatgptTabId, {
+      type: 'DO_CAPTURE_WITH_CLIPBOARD',
+    }).catch((e) => ({ ok: false, error: e.message }));
+    return result || { ok: false, error: 'content script returned nothing' };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    // Restore focus to whichever tab was active before — even on
+    // failure paths. Best-effort; ignore restoration errors.
+    if (previouslyActiveTabId) {
+      try { await chrome.tabs.update(previouslyActiveTabId, { active: true }); } catch {}
+    }
   }
 }
 
