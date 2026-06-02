@@ -465,6 +465,22 @@
     .turn-act:hover { background: rgba(255,255,255,0.05); color: var(--text2); }
     .turn-act.pinned { color: var(--orange); }
     .turn-act.annotated { color: var(--accent); }
+    /* Edit button is always prominent — works on any turn (running, just
+       completed, or from a finished session). It is the user's override
+       lever when MindM3rge mis-captures a response. */
+    .turn-act.edit-btn {
+      color: var(--accent);
+      background: rgba(124,92,252,0.10);
+      border: 1px solid rgba(124,92,252,0.32);
+    }
+    .turn-act.edit-btn:hover {
+      background: rgba(124,92,252,0.22);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .turn.user-edited {
+      box-shadow: 0 0 0 1px rgba(124,92,252,0.4);
+    }
 
     /* ═══ Annotations ═══ */
     .annotation {
