@@ -1,38 +1,5 @@
 // Critique prompt templates for multi-model validation
 
-// Outstanding-Issues preamble injected into rounds 2+ to prevent earlier-raised
-// concerns from being silently dropped by recency bias as the discussion narrows
-// toward concrete edits.
-//
-// v0.6.1: hardened against the "premature RESOLVED" failure mode — RESOLVED
-// requires a specific citation, and any later model CAN demote a prior RESOLVED
-// to CONTESTED if they have a substantive disagreement.
-//
-// v0.6.2: recalibrated to avoid disagreement-theater. Challenge is *permitted*
-// when warranted, not *encouraged* as a posture. Genuine agreement is the
-// right call when the model genuinely agrees. The bar for CONTESTED is a
-// substantive reason (an argument, fact, citation, or risk the resolving
-// response did not address), not the absence of one.
-const OUTSTANDING_ISSUES_PREAMBLE = `
-BEFORE producing your analysis below, you MUST first produce an "OUTSTANDING ISSUES" section. In that section, list every concrete concern, citation, doctrine, case, factual question, or risk raised in any earlier round. For each item, mark exactly one of these statuses:
-
-- CARRY FORWARD: the concern is still open and material to the final answer.
-- RESOLVED: the concern has actually been addressed by a specific prior response. You MUST cite that response (model name + round). If you cannot point to a specific response, the item is NOT RESOLVED.
-- CONTESTED: a prior round treated this as closed, but you have a substantive disagreement with the closure — meaning you can name an argument, fact, citation, or risk that the resolving response did not actually address. Explain in one sentence what was missed. For the rest of your analysis, treat it as CARRY FORWARD.
-- OUT OF SCOPE: the concern genuinely sits outside what the user is asking for. Cite the user's actual goal in one short phrase.
-
-RULES:
-
-1. You CANNOT silently drop items. Every item from prior rounds must appear in your list with an explicit status.
-2. The list cannot shrink across rounds. The next model updates statuses; it does not delete items.
-3. RESOLVED requires a specific citation to the response that resolved it. Without that citation, the item is not RESOLVED — it is CARRY FORWARD.
-4. CONTESTED is available when you have a substantive disagreement. It is NOT a default posture and NOT a way to perform skepticism. If a prior RESOLVED is correct, leave it RESOLVED — genuine agreement is the right call when you genuinely agree. Use CONTESTED only when you can name what the resolving response missed in one sentence.
-5. When a status is genuinely borderline between CARRY FORWARD and RESOLVED, prefer CARRY FORWARD. This is conservatism on closure, not invented disagreement.
-6. OUT OF SCOPE requires citing the user's stated goal. Inconvenience is not a reason.
-
-After producing the OUTSTANDING ISSUES section, then proceed with the rest of your response.
-`;
-
 export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives, priorTurns) {
   const directiveBlock = directives && directives.length > 0
     ? `\n\nFOCUS YOUR CRITIQUE ON THESE SPECIFIC AREAS:\n${directives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n`
@@ -55,18 +22,13 @@ export function buildCritiquePrompt(originalPrompt, previousModelName, previousR
     discussionBlock = `\n${previousModelName.toUpperCase()}'S RESPONSE:\n${previousResponse}\n`;
   }
 
-  // Inject Outstanding-Issues preamble only when there's a real prior-round
-  // discussion to track (round 2+). Round 1 critiques have only the starter's
-  // initial response — no earlier-round items to carry forward yet.
-  const outstandingBlock = roundNumber >= 2 ? OUTSTANDING_ISSUES_PREAMBLE : '';
-
   return `You are participating in a multi-model validation process (Round ${roundNumber}/${totalRounds}).
 
 IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE analysis directly in your response text. Everything must be readable in the chat — nothing hidden in attachments.
 
 ORIGINAL USER PROMPT:
 ${originalPrompt}
-${discussionBlock}${goalBlock}${directiveBlock}${outstandingBlock}
+${discussionBlock}${goalBlock}${directiveBlock}
 Review the discussion above. Consider what has been said by all prior participants, then provide your analysis:
 
 1. **AGREE**: What points from the discussion are correct and well-reasoned?
@@ -105,7 +67,7 @@ ORIGINAL PROMPT:
 ${originalPrompt}
 
 ${discussionBlock}
-${OUTSTANDING_ISSUES_PREAMBLE}
+
 Please revise your response based on the FULL discussion above (across all prior passes). You may:
 - Accept valid criticisms and incorporate them
 - Defend parts of your original answer if the critiques are wrong (explain why)
