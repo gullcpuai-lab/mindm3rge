@@ -1,5 +1,20 @@
 // Critique prompt templates for multi-model validation
 
+// Outstanding-Issues preamble injected into rounds 2+ to prevent earlier-raised
+// concerns from being silently dropped by recency bias as the discussion narrows
+// toward concrete edits. The list is not allowed to shrink across rounds — every
+// item is either RESOLVED, CARRY FORWARD, or OUT OF SCOPE.
+const OUTSTANDING_ISSUES_PREAMBLE = `
+BEFORE producing your analysis below, you MUST first produce an "OUTSTANDING ISSUES" section. In that section, list every concrete concern, citation, doctrine, case, factual question, or risk raised in any earlier round. For each item, mark one of:
+- RESOLVED (the concern was addressed in a later response and is now closed)
+- CARRY FORWARD (the concern is still open and material to the final answer)
+- OUT OF SCOPE (the concern is outside what the user is asking for)
+
+You are NOT allowed to silently drop earlier-raised items. If you cannot decide an item's status, mark it CARRY FORWARD. In any later round the list MUST contain every item from the prior round's list — it is not allowed to shrink. The next model in line must update this list, not replace it.
+
+After producing the OUTSTANDING ISSUES section, then proceed with the rest of your response.
+`;
+
 export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives, priorTurns) {
   const directiveBlock = directives && directives.length > 0
     ? `\n\nFOCUS YOUR CRITIQUE ON THESE SPECIFIC AREAS:\n${directives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n`
@@ -22,13 +37,18 @@ export function buildCritiquePrompt(originalPrompt, previousModelName, previousR
     discussionBlock = `\n${previousModelName.toUpperCase()}'S RESPONSE:\n${previousResponse}\n`;
   }
 
+  // Inject Outstanding-Issues preamble only when there's a real prior-round
+  // discussion to track (round 2+). Round 1 critiques have only the starter's
+  // initial response — no earlier-round items to carry forward yet.
+  const outstandingBlock = roundNumber >= 2 ? OUTSTANDING_ISSUES_PREAMBLE : '';
+
   return `You are participating in a multi-model validation process (Round ${roundNumber}/${totalRounds}).
 
 IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with download buttons. Put your ENTIRE analysis directly in your response text. Everything must be readable in the chat — nothing hidden in attachments.
 
 ORIGINAL USER PROMPT:
 ${originalPrompt}
-${discussionBlock}${goalBlock}${directiveBlock}
+${discussionBlock}${goalBlock}${directiveBlock}${outstandingBlock}
 Review the discussion above. Consider what has been said by all prior participants, then provide your analysis:
 
 1. **AGREE**: What points from the discussion are correct and well-reasoned?
@@ -67,7 +87,7 @@ ORIGINAL PROMPT:
 ${originalPrompt}
 
 ${discussionBlock}
-
+${OUTSTANDING_ISSUES_PREAMBLE}
 Please revise your response based on the FULL discussion above (across all prior passes). You may:
 - Accept valid criticisms and incorporate them
 - Defend parts of your original answer if the critiques are wrong (explain why)
