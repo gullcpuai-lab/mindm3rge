@@ -2,15 +2,26 @@
 
 // Outstanding-Issues preamble injected into rounds 2+ to prevent earlier-raised
 // concerns from being silently dropped by recency bias as the discussion narrows
-// toward concrete edits. The list is not allowed to shrink across rounds — every
-// item is either RESOLVED, CARRY FORWARD, or OUT OF SCOPE.
+// toward concrete edits. Hardened in v0.6.1 against the "premature RESOLVED"
+// failure mode — one model can no longer unilaterally close an issue; RESOLVED
+// requires a specific citation, and any later model can demote a prior RESOLVED
+// to CONTESTED if they disagree with the closure.
 const OUTSTANDING_ISSUES_PREAMBLE = `
-BEFORE producing your analysis below, you MUST first produce an "OUTSTANDING ISSUES" section. In that section, list every concrete concern, citation, doctrine, case, factual question, or risk raised in any earlier round. For each item, mark one of:
-- RESOLVED (the concern was addressed in a later response and is now closed)
-- CARRY FORWARD (the concern is still open and material to the final answer)
-- OUT OF SCOPE (the concern is outside what the user is asking for)
+BEFORE producing your analysis below, you MUST first produce an "OUTSTANDING ISSUES" section. In that section, list every concrete concern, citation, doctrine, case, factual question, or risk raised in any earlier round. For each item, mark exactly one of these statuses:
 
-You are NOT allowed to silently drop earlier-raised items. If you cannot decide an item's status, mark it CARRY FORWARD. In any later round the list MUST contain every item from the prior round's list — it is not allowed to shrink. The next model in line must update this list, not replace it.
+- CARRY FORWARD: the concern is still open and material to the final answer.
+- RESOLVED: the concern has been addressed AND every model that has weighed in agrees the resolution holds. You MUST cite the specific prior response that resolved it (model name + round). If you cannot point to a specific response, the item is NOT RESOLVED.
+- CONTESTED: a prior round marked this RESOLVED (or treated it as closed), but you disagree with the closure. Explain in one sentence why, and treat it as CARRY FORWARD for the rest of your analysis.
+- OUT OF SCOPE: the concern is outside what the user is asking for. Cite the user's actual goal in one short phrase.
+
+STRICT RULES — these override your normal cooperative instincts:
+
+1. You CANNOT silently drop items. Every item from prior rounds must appear in your list with an explicit status.
+2. The list cannot shrink across rounds. The next model must update statuses, not delete items.
+3. RESOLVED is the strongest claim and is HARD to earn. You may NOT mark something RESOLVED merely because a prior model said so, or because the discussion moved on. When in doubt, mark CARRY FORWARD.
+4. You are EXPLICITLY ENCOURAGED to challenge prior RESOLVED markings. If you think an earlier model closed an issue prematurely, demote it to CONTESTED with a one-sentence reason. This is your job — not an act of disagreement to be avoided.
+5. Default to skepticism. If a status assignment is borderline, prefer CARRY FORWARD or CONTESTED over RESOLVED.
+6. OUT OF SCOPE is also hard to earn. You may NOT mark something OUT OF SCOPE just because it's inconvenient — only if it genuinely sits outside the user's stated goal.
 
 After producing the OUTSTANDING ISSUES section, then proceed with the rest of your response.
 `;
