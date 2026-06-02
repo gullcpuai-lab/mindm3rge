@@ -67,22 +67,51 @@ function extractProse(el) {
   if (!el) return { prose: '', pillTexts: [] };
   const clone = el.cloneNode(true);
   const pillTexts = [];
-  const pillSelectors = [
+
+  // GPT-5 renders file references as <button> elements (no
+  // data-testid, no aria-label, text-only content = the file name)
+  // — NOT as <span data-testid="*-pill"> like older models. Strip
+  // BOTH styles.
+  const knownPillSelectors = [
     '[data-testid$="-pill"]',
     '[data-testid$="-chip"]',
     '[data-testid*="citation"]',
     '[data-testid*="source"]',
     '[data-testid*="file-attachment"]',
-    'a[target="_blank"][rel*="noopener"]',  // many ChatGPT citation links
+    'a[target="_blank"][rel*="noopener"]',
   ];
   const seen = new Set();
-  clone.querySelectorAll(pillSelectors.join(',')).forEach((p) => {
+  clone.querySelectorAll(knownPillSelectors.join(',')).forEach((p) => {
     if (seen.has(p)) return;
     seen.add(p);
     const t = (p.innerText || p.textContent || '').trim();
     if (t) pillTexts.push(t);
     p.remove();
   });
+
+  // Also strip <button> elements that look like file-reference chips:
+  // - no aria-label (legitimate action buttons like "Copy table" have one)
+  // - no data-testid
+  // - text content matches a filename-ish pattern OR is short
+  // This catches GPT-5's unmarked file-ref buttons without scrubbing
+  // legitimate action buttons.
+  clone.querySelectorAll('button').forEach((btn) => {
+    if (btn.hasAttribute('aria-label')) return;       // action button — keep
+    if (btn.dataset && btn.dataset.testid) return;    // marked button — keep
+    const t = (btn.innerText || btn.textContent || '').trim();
+    if (!t) return;
+    // Strip if text content looks like a file name / short identifier
+    // (no spaces typical of prose, or contains a recognized extension)
+    const isFilenameish =
+      /^[A-Za-z0-9_().\-\s]{1,80}\.[A-Za-z]{2,5}$/.test(t) ||      // ends in extension
+      /^[A-Za-z0-9_\-]+(\s*\(\d+\))?\s*$/.test(t) ||                // bare ident, maybe (1)
+      /^[A-Za-z0-9_]+(?:[ _-][A-Za-z0-9_]+){0,4}\s*\(\d+\)\s*$/.test(t); // ident (1)
+    if (isFilenameish) {
+      pillTexts.push(t);
+      btn.remove();
+    }
+  });
+
   const prose = (clone.innerText || clone.textContent || '').trim();
   return { prose, pillTexts };
 }
@@ -322,9 +351,15 @@ function watchForResponse() {
     // length-10 check but is garbage. Strip the pills, gate on the
     // remaining prose. If the prose by itself is too short, wait.
     const { prose, pillTexts } = extractProse(lastResponse);
-    if (prose.length < 40) return; // prose-only minimum — prevents
-                                    // capturing a streaming snapshot
-                                    // that's all pills + intro
+    // Prose-only minimum. The user's bug case was "I reviewed both the
+    // existing complaint and the" (~47 chars) followed by 6 unmarked
+    // file-ref buttons — the intro had streamed but the analysis prose
+    // hadn't. 200 is high enough to reject every observed false-positive
+    // case while still capturing legitimately short responses (e.g.
+    // "Yes." is rare from ChatGPT but if a model genuinely produces a
+    // sub-200-char reply the user will see the gate in action and can
+    // hit Edit to override).
+    if (prose.length < 200) return;
     DEBUG && console.log('[MindM3rge] ChatGPT capture: prose_len=' +
       prose.length + ' pills=' + pillTexts.length);
 
