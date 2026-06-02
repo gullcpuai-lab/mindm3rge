@@ -15,21 +15,24 @@ const SELECTORS = {
   ],
   response: [
     // ChatGPT renders the assistant turn as a container with web-search
-    // citation chips, file-reference badges, thinking summaries, action
-    // buttons, AND the actual prose. Selecting the whole container and
-    // calling .innerText concatenates all of those — yielding garbage
-    // like "Farley_COA7_8_FINAL_v3 / Justia Law / Supreme Court of
-    // California". Target the markdown body specifically.
+    // citation chips, file-reference badges, "thinking" summaries,
+    // action buttons, AND the actual prose. Selecting the whole
+    // container and calling .innerText concatenates all of those —
+    // yielding garbage like "Farley_COA7_8_FINAL_v3 / Justia Law /
+    // Supreme Court of California" when the file chips have rendered
+    // but .markdown has not yet appeared.
+    //
+    // NO bare-container fallback here, on purpose. If .markdown does
+    // not exist yet, capture should WAIT — not fall back to the
+    // surrounding container and capture the loading-state chrome.
+    // findAll() returning [] from these selectors makes tryCapture()
+    // re-arm the stability timer, exactly the right behavior.
     '[data-message-author-role="assistant"] .markdown',
     '[data-message-author-role="assistant"] [data-message-content]',
     '[data-message-author-role="assistant"] .prose',
     '.agent-turn .markdown',
     '.markdown.prose',
-    // Last-resort container fallback — keeps capture working if ChatGPT
-    // restructures the DOM and removes .markdown. May still pick up
-    // citation chips when this path is hit.
-    '[data-message-author-role="assistant"]',
-    '.message-content',
+    '.markdown',
   ],
   stopButton: [
     'button[data-testid="stop-button"]',
