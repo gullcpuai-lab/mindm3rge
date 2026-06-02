@@ -1,6 +1,7 @@
 // Content script for chatgpt.com / chat.openai.com — self-healing with selector engine
 
-const DEBUG = false;
+const DEBUG = true; // v0.5.1 — temporarily on so users can diagnose
+                    // capture failures from the chatgpt.com console.
 let isWaitingForResponse = false;
 let lastResponseText = '';
 
@@ -75,33 +76,41 @@ injectClipboardInterceptor();
 
 // Locate the message-level "Copy response" button for the LAST
 // assistant turn. NOT the per-code-block Copy or per-table Copy.
+//
+// Searches DOCUMENT-WIDE and returns the last matching button —
+// the toolbar may not be a child of [data-message-author-role=
+// "assistant"], so scoping the query to the turn's subtree misses it.
+// We then verify the button is positioned BELOW the assistant turn
+// (the toolbar always renders below the message body, not inside it).
 function findMessageCopyButton(assistantTurn) {
-  if (!assistantTurn) return null;
-  // Try known selectors in priority order. Action toolbar lives in a
-  // sibling of the main message body, not inside .markdown.
   const candidates = [
     'button[data-testid="copy-turn-action-button"]',
+    'button[data-testid="copy-message-action-button"]',
+    'button[data-testid="copy-button"]',
     'button[data-testid$="copy-response"]',
     'button[aria-label="Copy"]',
     'button[aria-label="Copy response"]',
+    'button[aria-label="Copy message"]',
+    'button[aria-label*="Copy" i][aria-label*="response" i]',
   ];
-  // Look UP from the turn to the parent message wrapper so we can
-  // find the action toolbar that's a sibling of .markdown.
-  const wrap = assistantTurn.parentElement || assistantTurn;
+  const all = [];
   for (const sel of candidates) {
-    const els = wrap.querySelectorAll(sel);
-    for (const el of els) {
-      if (el.closest('pre')) continue;     // code block copy — skip
-      // Skip the in-message "Copy table" buttons; those have empty
-      // text in their inner <span>. The message-level copy buttons
-      // typically also have empty inner text but a clear aria-label.
-      const aria = (el.getAttribute('aria-label') || '').toLowerCase();
-      if (aria.includes('table')) continue;
-      if (aria.includes('code')) continue;
-      return el;
-    }
+    try {
+      const els = document.querySelectorAll(sel);
+      for (const el of els) {
+        if (el.closest('pre')) continue;        // code-block copy — skip
+        const aria = (el.getAttribute('aria-label') || '').toLowerCase();
+        if (aria.includes('table')) continue;
+        if (aria.includes('code')) continue;
+        if (aria.includes('link')) continue;
+        all.push(el);
+      }
+    } catch (e) {}
   }
-  return null;
+  if (all.length === 0) return null;
+  // Return the LAST one in document order — that's the most recent
+  // assistant message's copy button.
+  return all[all.length - 1];
 }
 
 const SELECTORS = {
@@ -453,50 +462,59 @@ function watchForResponse() {
     if (captured) return;
 
     const stopBtn = find('stopButton').el;
-    if (stopBtn) return; // still generating; next mutation will reschedule
+    if (stopBtn) { DEBUG && console.log('[MindM3rge] still streaming (stop btn present)'); return; }
 
     const responses = findAll('response');
-    if (responses.length === 0) return;
+    if (responses.length === 0) { DEBUG && console.log('[MindM3rge] no .markdown yet'); return; }
 
     const lastResponse = responses[responses.length - 1];
+    let capturedText = null;
+    let usedPath = null;
 
-    // Detection of "response is truly done": the message-level copy
-    // button must exist. ChatGPT only renders the action toolbar
-    // (copy / regenerate / like / dislike) AFTER the message is
-    // fully complete — past every tool call, past every streaming
-    // chunk, past every web-search source. This is a far stronger
-    // completion signal than "stop button is gone" because the stop
-    // button can disappear DURING tool calls.
+    // PRIMARY PATH: try to find the message-level Copy response button.
+    // Its presence is the strongest "response is fully done" signal —
+    // ChatGPT only renders the action toolbar after the message
+    // completes (past every tool call, past every streaming chunk).
     const copyBtn = findMessageCopyButton(lastResponse);
-    if (!copyBtn) return; // not done yet — wait
 
-    // Trigger ChatGPT's own copy logic. The page main-world monkey
-    // patch on navigator.clipboard.writeText fires a window.postMessage
-    // we listen for. interceptedCopyText is updated synchronously
-    // from the message handler.
-    interceptedCopyText = null;
-    try { copyBtn.click(); } catch (e) {
-      DEBUG && console.warn('[MindM3rge] copy click failed', e);
+    if (copyBtn) {
+      // Trigger ChatGPT's own copy logic. The page-world monkey patch
+      // on navigator.clipboard.writeText fires a window.postMessage
+      // back; the listener stores it in interceptedCopyText.
+      interceptedCopyText = null;
+      try { copyBtn.click(); } catch (e) { DEBUG && console.warn('[MindM3rge] copy click failed', e); }
+      await new Promise((r) => setTimeout(r, 250));
+      if (interceptedCopyText && interceptedCopyText.length > 10) {
+        capturedText = interceptedCopyText;
+        usedPath = 'copy-button-intercept';
+      } else {
+        DEBUG && console.log('[MindM3rge] copy intercept yielded no text (CSP or different copy path), falling back');
+      }
+    } else {
+      DEBUG && console.log('[MindM3rge] no copy button found yet — using DOM fallback if prose is substantial');
     }
 
-    // Wait briefly for the intercept event to fire. ChatGPT's copy
-    // is synchronous in practice but give it a tick.
-    await new Promise((r) => setTimeout(r, 250));
-
-    let capturedText = interceptedCopyText;
-
-    // Fallback 1: maybe the interceptor wasn't injected in time, or
-    // ChatGPT used a path we didn't patch. Fall back to .markdown
-    // innerText.
+    // FALLBACK PATH: scrape .markdown innerText, but gate on prose
+    // length so we don't grab a streaming-intro snippet.
     if (!capturedText) {
       const text = lastResponse.innerText || lastResponse.textContent;
       if (!text || text.length <= 10) return;
-      // Apply the older v0.4.5 prose-length gate so we don't capture
-      // the streaming-intro garbage if we end up here.
       const { prose } = extractProse(lastResponse);
-      if (prose.length < 200) return;
+      // If the copy button DIDN'T exist (probable "still loading"
+      // signal), require a higher prose threshold to make sure we're
+      // not capturing intro fragments. If the copy button DID exist
+      // but intercept failed (CSP), trust that the response is done
+      // and accept any non-trivial text.
+      const minProse = copyBtn ? 50 : 200;
+      if (prose.length < minProse) {
+        DEBUG && console.log('[MindM3rge] prose too short (' + prose.length + ' < ' + minProse + '), waiting');
+        return;
+      }
       capturedText = text;
+      usedPath = copyBtn ? 'dom-fallback-after-copy-click' : 'dom-fallback-no-copy-button';
     }
+
+    DEBUG && console.log('[MindM3rge] capturing via ' + usedPath + ', text_len=' + capturedText.length);
 
     const isNew = responses.length > responseCountAtStart;
     const isChanged = capturedText !== lastResponseText;
