@@ -48,6 +48,45 @@ const SELECTORS = {
   ],
 };
 
+// Strip inline pill/citation/badge elements from a response element and
+// return the prose-only innerText. ChatGPT renders web-search citations
+// and uploaded-file references as inline <span data-testid="*-pill">
+// chips inside .markdown. A response that says
+//   "I reviewed [pdf_a] and [pdf_b]. Here is my analysis: ..."
+// renders the bracketed parts as pills. When capture fires during
+// streaming — before the analysis prose has filled in — the visible
+// text is dominated by pill names, and the captured response looks
+// like:
+//   "I\nfile_a\nfile_b\nfile_a\n..."
+//
+// This helper produces a cleaned text and a per-pill list so the
+// capture logic can both (a) gate on real-prose-length to avoid
+// premature capture, and (b) annotate the final captured text with
+// the references in a way that doesn't dominate it.
+function extractProse(el) {
+  if (!el) return { prose: '', pillTexts: [] };
+  const clone = el.cloneNode(true);
+  const pillTexts = [];
+  const pillSelectors = [
+    '[data-testid$="-pill"]',
+    '[data-testid$="-chip"]',
+    '[data-testid*="citation"]',
+    '[data-testid*="source"]',
+    '[data-testid*="file-attachment"]',
+    'a[target="_blank"][rel*="noopener"]',  // many ChatGPT citation links
+  ];
+  const seen = new Set();
+  clone.querySelectorAll(pillSelectors.join(',')).forEach((p) => {
+    if (seen.has(p)) return;
+    seen.add(p);
+    const t = (p.innerText || p.textContent || '').trim();
+    if (t) pillTexts.push(t);
+    p.remove();
+  });
+  const prose = (clone.innerText || clone.textContent || '').trim();
+  return { prose, pillTexts };
+}
+
 function find(type) {
   for (const sel of SELECTORS[type] || []) {
     const el = document.querySelector(sel);
@@ -274,6 +313,20 @@ function watchForResponse() {
     const lastResponse = responses[responses.length - 1];
     const text = lastResponse.innerText || lastResponse.textContent;
     if (!text || text.length <= 10) return;
+
+    // Gate on PROSE-only length. ChatGPT renders web-search citations
+    // and file references as inline pills inside .markdown. During the
+    // early streaming phase the model may emit "I [pill_a] [pill_b]"
+    // before the actual analysis arrives. The raw innerText is e.g.
+    // "I\nComplaint Farley (1)\nFarley_COA7_8_FINAL_v3" — passes the
+    // length-10 check but is garbage. Strip the pills, gate on the
+    // remaining prose. If the prose by itself is too short, wait.
+    const { prose, pillTexts } = extractProse(lastResponse);
+    if (prose.length < 40) return; // prose-only minimum — prevents
+                                    // capturing a streaming snapshot
+                                    // that's all pills + intro
+    DEBUG && console.log('[MindM3rge] ChatGPT capture: prose_len=' +
+      prose.length + ' pills=' + pillTexts.length);
 
     const isNew = responses.length > responseCountAtStart;
     const isChanged = text !== lastResponseText;
