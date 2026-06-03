@@ -307,30 +307,89 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // button, wait for ChatGPT to populate the clipboard, then read it.
     // This works (whereas reading clipboard from a background tab
     // doesn't) because our tab is now the active foreground tab.
+    //
+    // v0.5.4 — added staleness defense. The pre-v0.5.4 path silently
+    // accepted whatever was on the clipboard if it was > 10 chars long,
+    // which meant a SILENT copy-button failure (e.g. ChatGPT's "Failed
+    // to copy" toast) left the PREVIOUS turn's response on the
+    // clipboard and we captured that as the "new" response. We now
+    // (a) snapshot the clipboard BEFORE the click and reject the read
+    // if it didn't change, and (b) reject the read if it equals the
+    // text we captured for the previous turn.
     (async () => {
       const responses = findAll('response');
       if (responses.length === 0) { sendResponse({ ok: false, error: 'no response' }); return; }
       const last = responses[responses.length - 1];
       const copyBtn = findMessageCopyButton(last);
       if (!copyBtn) { sendResponse({ ok: false, error: 'no copy button' }); return; }
+
+      // v0.5.4 staleness defense step 1: snapshot the clipboard before
+      // we click. If the post-click read equals this, the copy did not
+      // write anything new.
+      let preClipboard = '';
+      try {
+        preClipboard = await navigator.clipboard.readText();
+      } catch (e) {
+        DEBUG && console.log('[MindM3rge] pre-click clipboard read failed (ok, continuing):', e.message);
+      }
+
       try {
         copyBtn.click();
       } catch (e) {
         sendResponse({ ok: false, error: 'click failed: ' + e.message }); return;
       }
-      // Wait for clipboard to populate. ChatGPT does navigator.
-      // clipboard.writeText asynchronously; 350ms is plenty.
-      await new Promise((r) => setTimeout(r, 350));
+      // v0.5.4 — bumped from 350ms to 500ms. Recent ChatGPT updates
+      // populate the clipboard slightly slower, and a longer wait is
+      // far cheaper than a stale capture.
+      await new Promise((r) => setTimeout(r, 500));
+
+      let text = '';
       try {
-        const text = await navigator.clipboard.readText();
-        if (text && text.length > 10) {
-          sendResponse({ ok: true, text });
-        } else {
-          sendResponse({ ok: false, error: 'clipboard empty or tiny: ' + (text?.length || 0) });
-        }
+        text = await navigator.clipboard.readText();
       } catch (e) {
         sendResponse({ ok: false, error: 'clipboard.readText failed: ' + e.message });
+        return;
       }
+
+      if (!text || text.length <= 10) {
+        sendResponse({ ok: false, error: 'clipboard empty or tiny: ' + (text?.length || 0) });
+        return;
+      }
+
+      // v0.5.4 staleness check 1: pre-click clipboard equals post-click
+      // clipboard ⇒ the copy click wrote nothing. Either the button
+      // click didn't actually fire on the page's handler, ChatGPT
+      // showed a "Failed to copy" toast, or the page's clipboard write
+      // errored silently.
+      if (text === preClipboard) {
+        DEBUG && console.warn('[MindM3rge] STALE: clipboard unchanged by copy click',
+                              { len: text.length, preview: text.slice(0, 80) });
+        sendResponse({
+          ok: false,
+          error: 'clipboard unchanged after copy click — stale (ChatGPT did not write new content)',
+          preLen: preClipboard.length,
+          postLen: text.length,
+        });
+        return;
+      }
+
+      // v0.5.4 staleness check 2: post-click clipboard equals the text
+      // we captured for the previous turn ⇒ we'd be re-capturing the
+      // prior response as the new one. This catches the case where
+      // someone else (or a prior session) left the same response on
+      // the clipboard and the copy click failed silently.
+      if (lastResponseText && text === lastResponseText) {
+        DEBUG && console.warn('[MindM3rge] STALE: clipboard matches previously captured response',
+                              { len: text.length, preview: text.slice(0, 80) });
+        sendResponse({
+          ok: false,
+          error: 'clipboard matches previous turn — stale (would have captured prior response)',
+          previousResponseLen: lastResponseText.length,
+        });
+        return;
+      }
+
+      sendResponse({ ok: true, text });
     })();
     return true; // async sendResponse
   }
