@@ -389,63 +389,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
 
-      // v0.5.5 content-match check: verify the clipboard text actually
-      // corresponds to what's visible in the assistant's response on
-      // the page. Even if the staleness checks pass (clipboard changed
-      // AND doesn't match prior turn), the clipboard could still be
-      // foreign content the user copied from another tab between turns.
-      // The bulletproof answer is to compare what's on the clipboard
-      // against the DOM ground truth.
-      //
-      // We normalize both to lowercase alphanumeric so markdown syntax
-      // on the clipboard (**bold**, ## heading, ```python```) vs.
-      // rendered text in the DOM (bold, heading, python code) line up.
-      // Then we check that a substantial prefix of the clipboard
-      // appears somewhere in the normalized DOM text.
-      const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const domText = last.innerText || last.textContent || '';
-      const normDom = normalize(domText);
-      const normClip = normalize(text);
-
-      // Pick a prefix length that's long enough to be statistically
-      // unique (~30 alphanumeric chars ≈ 5–7 English words) but short
-      // enough to handle leading-syntax mismatches (markdown headers,
-      // code fences). Skip the check entirely if the clipboard is too
-      // short for the prefix to be meaningful — tiny responses ("Yes.",
-      // "Done.") get covered by the earlier staleness checks anyway.
-      const PREFIX_LEN = 30;
-      if (normClip.length >= PREFIX_LEN) {
-        const clipPrefix = normClip.slice(0, PREFIX_LEN);
-        if (!normDom.includes(clipPrefix)) {
-          // Try a sliding window — sometimes ChatGPT's copy includes a
-          // leading "ChatGPT said:" or similar label that isn't in the
-          // visible message DOM. Scan a few offsets before declaring
-          // mismatch.
-          let found = false;
-          for (let offset = 0; offset <= 60 && offset + PREFIX_LEN <= normClip.length; offset += 10) {
-            if (normDom.includes(normClip.slice(offset, offset + PREFIX_LEN))) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            DEBUG && console.warn('[MindM3rge] CLIPBOARD MISMATCH: clipboard content does not match response DOM',
-                                  {
-                                    clipboardPreview: text.slice(0, 120),
-                                    domPreview: domText.slice(0, 120),
-                                    clipboardLen: text.length,
-                                    domLen: domText.length,
-                                  });
-            sendResponse({
-              ok: false,
-              error: 'clipboard content does not match visible response DOM — foreign clipboard content suspected',
-              clipboardLen: text.length,
-              domLen: domText.length,
-            });
-            return;
-          }
-        }
-      }
+      // v0.5.6 — removed the DOM content-match check that v0.5.5 added.
+      // The DOM was the unreliable source we moved away from in the
+      // first place (it returned file-reference pill chips during
+      // streaming — "Farley_COA7_8_FINAL_v3 × 6"). Validating against
+      // it could over-reject legitimate captures during render races.
+      // The two staleness checks above are sufficient: if the clipboard
+      // didn't change after the click, the copy failed. Simpler and
+      // more robust than chasing the DOM ground truth.
 
       sendResponse({ ok: true, text });
     })();
