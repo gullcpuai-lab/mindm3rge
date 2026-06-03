@@ -335,6 +335,50 @@ document.getElementById('paste-submit')?.addEventListener('click', async () => {
   setTimeout(() => { btn.textContent = 'Paste'; btn.disabled = false; }, 3000);
 });
 
+// v0.6.0 — short-response confirmation modal. Only (re)populate when the
+// pending turn changes, so the 1.5s poll loop doesn't wipe out text the user
+// is typing into the confirm textarea.
+let confirmShownFor = null;
+function showConfirmModal(pc) {
+  const modal = document.getElementById('confirm-modal');
+  if (!modal) return;
+  if (confirmShownFor !== pc.turnIndex) {
+    document.getElementById('confirm-len').textContent = pc.length ?? 0;
+    document.getElementById('confirm-preview').textContent = pc.preview || '(empty)';
+    document.getElementById('confirm-textarea').value = '';
+    confirmShownFor = pc.turnIndex;
+  }
+  modal.classList.remove('hidden');
+}
+function hideConfirmModal() {
+  document.getElementById('confirm-modal')?.classList.add('hidden');
+  confirmShownFor = null;
+}
+
+// "Looks good" — accept the short capture as-is and resume the rotation.
+document.getElementById('confirm-looks-good')?.addEventListener('click', async () => {
+  const btn = document.getElementById('confirm-looks-good');
+  btn.disabled = true; btn.textContent = 'Continuing...';
+  await chrome.runtime.sendMessage({ type: 'CONFIRM_RESPONSE' });
+  hideConfirmModal();
+  setTimeout(() => { btn.disabled = false; btn.textContent = 'Looks good — continue'; }, 2000);
+});
+
+// "Use pasted text" — replace the captured turn with the user's full paste,
+// then resume. Falls back to a plain confirm if the textarea is empty.
+document.getElementById('confirm-replace')?.addEventListener('click', async () => {
+  const text = document.getElementById('confirm-textarea').value.trim();
+  const btn = document.getElementById('confirm-replace');
+  btn.disabled = true; btn.textContent = 'Continuing...';
+  if (text) {
+    await chrome.runtime.sendMessage({ type: 'REPLACE_AND_CONTINUE', response: text });
+  } else {
+    await chrome.runtime.sendMessage({ type: 'CONFIRM_RESPONSE' });
+  }
+  hideConfirmModal();
+  setTimeout(() => { btn.disabled = false; btn.textContent = 'Use pasted text — continue'; }, 2000);
+});
+
 // Retry current model in a fresh chat
 document.getElementById('retry-model-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('retry-model-btn');
@@ -657,6 +701,15 @@ function updateUI(session) {
     waiting.classList.add('hidden');
   }
 
+  // v0.6.0 — short-response confirmation gate. When the background pauses on a
+  // suspiciously short ChatGPT capture, surface the confirm panel so the user
+  // can accept it or paste the real answer before the rotation continues.
+  if (session.status === 'awaiting_confirmation' && session.pendingConfirmation) {
+    showConfirmModal(session.pendingConfirmation);
+  } else {
+    hideConfirmModal();
+  }
+
   // Complete
   if (session.status === 'complete') {
     stopPolling();
@@ -952,12 +1005,14 @@ chrome.runtime.onMessage.addListener((message) => {
 (async () => {
   try {
     const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
-    if (status?.session && (status.session.status === 'running' || status.session.status === 'complete')) {
+    const restorable = ['running', 'complete', 'awaiting_confirmation'];
+    if (status?.session && restorable.includes(status.session.status)) {
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('discussion-section').classList.remove('hidden');
       lastTurnCount = 0;
       updateUI(status.session);
-      if (status.session.status === 'running') startPolling();
+      // Keep polling while running OR paused on confirmation (so resume is picked up).
+      if (status.session.status !== 'complete') startPolling();
     }
   } catch (e) {}
 

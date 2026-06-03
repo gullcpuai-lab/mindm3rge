@@ -925,6 +925,24 @@
               </div>
             </div>
 
+            <!-- Short-response confirmation (v0.6.0) — pauses the rotation when
+                 a ChatGPT capture looks suspiciously short (e.g. only the
+                 thinking preamble was grabbed) so the user can verify or paste
+                 the real answer before continuing. -->
+            <div class="paste-modal hidden" id="confirm-modal">
+              <div class="paste-modal-content">
+                <h3>&#9888;&#65039; Check ChatGPT response</h3>
+                <p class="sub-text">MindM3rge captured a suspiciously short ChatGPT response (<strong><span id="confirm-len">0</span> chars</strong>). This usually means only the &ldquo;thinking&rdquo; preamble was grabbed, not the full answer. The rotation is <strong>paused</strong>.</p>
+                <div id="confirm-preview" style="max-height:140px;overflow:auto;background:var(--bg2,#1c1c1e);border:1px solid var(--border,#333);border-radius:8px;padding:10px;font-size:13px;line-height:1.5;color:var(--text2,#c7c7cc);white-space:pre-wrap;margin-bottom:10px;"></div>
+                <p class="sub-text">If that&rsquo;s the complete answer, continue. Otherwise copy the full response from ChatGPT, paste it below, and continue &mdash; it&rsquo;ll be used as ChatGPT&rsquo;s turn and passed to the next model.</p>
+                <textarea id="confirm-textarea" rows="10" placeholder="(Optional) paste the correct, full ChatGPT response here..."></textarea>
+                <div class="paste-actions">
+                  <button class="btn-cancel" id="confirm-looks-good">Looks good &mdash; continue</button>
+                  <button class="btn-primary" id="confirm-replace">Use pasted text &mdash; continue</button>
+                </div>
+              </div>
+            </div>
+
             <div class="synth hidden" id="synthesis-card">
               <h3>&#10024; Final Synthesis</h3>
               <div id="synthesis-content" style="font-size:14px;line-height:1.7;color:var(--text2);white-space:pre-wrap;"></div>

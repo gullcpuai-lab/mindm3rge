@@ -106,6 +106,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'CONFIRM_RESPONSE') {
+    // v0.6.0 — user confirmed a short ChatGPT capture is correct; resume.
+    handleConfirmResponse().then(sendResponse);
+    return true;
+  }
+
+  if (message.type === 'REPLACE_AND_CONTINUE') {
+    // v0.6.0 — user hand-pasted the real response for a short capture; replace
+    // the recorded turn and resume.
+    handleReplaceAndContinue(message.response).then(sendResponse);
+    return true;
+  }
+
   if (message.type === 'CAPTURE_VIA_FOCUS') {
     // v0.5.3 — User-suggested approach: briefly switch focus to the
     // chatgpt tab so the content script can click the Copy response
@@ -177,7 +190,23 @@ async function handleStartSession(data) {
   return { ok: true, sessionId: session.id };
 }
 
-async function handleResponseCaptured(data, tab) {
+// v0.6.0 — Short-result guard thresholds. ChatGPT capture can still grab only
+// the thinking PREAMBLE (1-2 sentences) instead of the full answer. When a
+// captured ChatGPT response looks suspiciously short, we PAUSE the rotation and
+// ask the user to confirm it copied correctly (or hand-paste the real answer)
+// before continuing. See handleConfirmResponse / handleReplaceAndContinue.
+const SHORT_GUARD_MIN_CHARS = 400;   // below this → always confirm
+const SHORT_GUARD_SOFT_CHARS = 700;  // below this AND <=2 sentences → confirm
+
+function isSuspiciouslyShort(text) {
+  const t = (text || '').trim();
+  if (t.length < SHORT_GUARD_MIN_CHARS) return true;
+  const sentences = (t.match(/[.!?](\s|$)/g) || []).length;
+  if (sentences <= 2 && t.length < SHORT_GUARD_SOFT_CHARS) return true;
+  return false;
+}
+
+async function handleResponseCaptured(data, tab, opts = {}) {
   const { model, response } = data;
   const session = await getSession();
 
@@ -196,7 +225,38 @@ async function handleResponseCaptured(data, tab) {
     timestamp: new Date().toISOString(),
   });
 
-  // Determine next step
+  // v0.6.0 short-result guard (ChatGPT only; skipped for user-supplied pastes).
+  // If the captured text is suspiciously short, pause and ask the user to
+  // verify before the rotation continues, so a preamble-only capture never
+  // silently propagates through the rest of the discussion.
+  if (model === 'chatgpt' && !opts.skipGuard && isSuspiciouslyShort(response)) {
+    session.status = 'awaiting_confirmation';
+    session.pendingConfirmation = {
+      turnIndex: session.turns.length - 1,
+      model,
+      modelName: MODEL_NAMES[model],
+      reason: 'short_response',
+      length: (response || '').trim().length,
+      preview: (response || '').trim().slice(0, 600),
+      capturedAt: new Date().toISOString(),
+    };
+    await saveSession(session);
+    chrome.runtime.sendMessage({ type: 'CONFIRMATION_REQUIRED', session });
+    chrome.notifications?.create({
+      type: 'basic',
+      iconUrl: '/public/icons/icon128.png',
+      title: 'MindM3rge — Check ChatGPT response',
+      message: `Captured only ${(response || '').trim().length} chars from ChatGPT. Paused for your confirmation.`,
+    });
+    return { ok: true, awaitingConfirmation: true };
+  }
+
+  return await advanceSession(session);
+}
+
+// Advance the rotation from the current session state (turns already recorded).
+// Shared by handleResponseCaptured and the post-confirmation resume handlers.
+async function advanceSession(session) {
   const nextAction = getNextAction(session);
 
   if (nextAction.done) {
@@ -231,6 +291,33 @@ async function handleResponseCaptured(data, tab) {
   await sendToModel(nextAction.model, nextAction.prompt, session.files);
 
   return { ok: true, nextModel: nextAction.model, nextStep: nextAction.step };
+}
+
+// v0.6.0 — user confirmed the (short) ChatGPT capture is correct; resume.
+async function handleConfirmResponse() {
+  const session = await getSession();
+  if (!session || session.status !== 'awaiting_confirmation') return { ok: false };
+  session.status = 'running';
+  delete session.pendingConfirmation;
+  await saveSession(session);
+  return await advanceSession(session);
+}
+
+// v0.6.0 — user hand-pasted the correct response; replace the captured turn's
+// content (so downstream prompts pick it up) and resume.
+async function handleReplaceAndContinue(responseText) {
+  const session = await getSession();
+  if (!session || session.status !== 'awaiting_confirmation') return { ok: false };
+  const pc = session.pendingConfirmation;
+  if (pc && typeof pc.turnIndex === 'number' && session.turns[pc.turnIndex]) {
+    session.turns[pc.turnIndex].content = responseText;
+    session.turns[pc.turnIndex].userEdited = true;
+    session.turns[pc.turnIndex].editedAt = new Date().toISOString();
+  }
+  session.status = 'running';
+  delete session.pendingConfirmation;
+  await saveSession(session);
+  return await advanceSession(session);
 }
 
 function getNextAction(session) {
@@ -537,10 +624,13 @@ async function handleManualResponse(responseText) {
   const session = await getSession();
   if (!session || session.status !== 'running') return { ok: false };
 
-  // Feed the pasted response directly into the session as if the model responded
+  // Feed the pasted response directly into the session as if the model
+  // responded. skipGuard: this is the user's own paste — never second-guess it
+  // with the short-result confirmation.
   await handleResponseCaptured(
     { model: session.currentModel, response: responseText },
-    null
+    null,
+    { skipGuard: true }
   );
   return { ok: true };
 }

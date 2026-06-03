@@ -275,6 +275,34 @@ function extractProse(el) {
   return { prose, pillTexts };
 }
 
+// v0.6.0 — A ChatGPT "thinking" (GPT-5 Thinking) response is ONE assistant turn
+// that contains MULTIPLE sibling prose blocks: a short reasoning PREAMBLE
+// (e.g. "I'll ground this against the uploaded FAC first..."), then the real
+// answer, then sometimes a canvas / writing-block. Confirmed via a live DOM
+// dump of a shared thinking response: three `.markdown` siblings of 217 / 8963
+// / 2691 chars inside one [data-message-author-role="assistant"] container.
+//
+// The pre-v0.6.0 capture grabbed responses[responses.length-1] — a SINGLE
+// block. During the preamble->think pause (preamble rendered, answer not yet),
+// that single block IS the 217-char preamble, so capture locked onto it and
+// the real answer below was never sent ("it only grabs the first part").
+//
+// Fix: capture the WHOLE last assistant turn — concatenate every prose block
+// (.markdown answer/preamble + ProseMirror writing-block canvas) inside the
+// last assistant container, pill-stripped, in document order.
+function getLastAssistantTurnText() {
+  const turns = document.querySelectorAll('[data-message-author-role="assistant"]');
+  if (!turns.length) return '';
+  const turn = turns[turns.length - 1];
+  let blocks = [...turn.querySelectorAll('.markdown, .ProseMirror, [data-message-content]')];
+  // Drop blocks nested inside an earlier-collected block (avoids double-counting
+  // a .markdown that also lives inside a .ProseMirror canvas wrapper).
+  blocks = blocks.filter((el, i) => !blocks.some((o, j) => j < i && o.contains(el)));
+  if (!blocks.length) return (turn.innerText || turn.textContent || '').trim();
+  const parts = blocks.map((b) => extractProse(b).prose).filter((p) => p && p.length);
+  return parts.join('\n\n').trim();
+}
+
 function find(type) {
   for (const sel of SELECTORS[type] || []) {
     const el = document.querySelector(sel);
@@ -609,6 +637,15 @@ function watchForResponse() {
 
   const STABILITY_MS = 3000;
 
+  // v0.6.0 anti-premature-capture state. The preamble->think pause leaves the
+  // turn text momentarily STABLE (preamble done, answer not started). To avoid
+  // locking onto it, require the captured length to hold steady across
+  // consecutive tryCapture ticks before accepting — and longer for short text
+  // (a lone ~217-char block is almost certainly a preamble, not the answer).
+  let settleLen = -1;
+  let settleCount = 0;
+  const SHORT_GUARD_CHARS = 250;
+
   async function tryCapture() {
     if (captured) return;
 
@@ -619,17 +656,39 @@ function watchForResponse() {
     if (responses.length === 0) { DEBUG && console.log('[MindM3rge] no .markdown yet'); return; }
 
     const lastResponse = responses[responses.length - 1];
-    let capturedText = null;
-    let usedPath = null;
 
-    // PRIMARY PATH (v0.5.3): ask the background to focus our tab, then
-    // click the Copy response button + read navigator.clipboard.
-    // The focus is the missing ingredient — content scripts can't read
-    // clipboard from background tabs, but if we briefly become the
-    // foreground tab, readText() works. Background restores focus to
-    // the dashboard tab after we return the text.
+    // v0.6.0 — CHEAP DOM read first (no tab-focus steal): the WHOLE assistant
+    // turn (preamble + answer + canvas), pill-stripped. We settle the capture
+    // off this so we don't focus-steal the ChatGPT tab on every tick.
+    let capturedText = getLastAssistantTurnText() ||
+                       (lastResponse.innerText || lastResponse.textContent || '');
+    if (!capturedText || capturedText.length <= 10) return;
+
+    // v0.6.0 anti-premature-capture: the length must hold steady across ticks
+    // before we accept (bridges the preamble->think pause, where the turn text
+    // is momentarily stable before the answer streams in). Short text must hold
+    // longer — a lone ~217-char block is almost certainly a preamble, not the
+    // answer. tryCapture is called ~1/s by checkInterval, so each tick ~= 1s.
+    const curLen = capturedText.length;
+    if (curLen !== settleLen) { settleLen = curLen; settleCount = 0; return; }
+    settleCount++;
+    const neededTicks = curLen < SHORT_GUARD_CHARS ? 4 : 2;
+    if (settleCount < neededTicks) {
+      DEBUG && console.log('[MindM3rge] settling (' + settleCount + '/' + neededTicks +
+                           ' @ len ' + curLen + '), waiting');
+      return;
+    }
+    // Re-verify streaming is really finished — the Stop button reappears if the
+    // model resumed after a thinking pause.
+    if (find('stopButton').el) { settleCount = 0; DEBUG && console.log('[MindM3rge] stop btn reappeared — resumed, not done'); return; }
+
+    // Settled + done. NOW (once only) try the canonical Copy-response path for
+    // clean markdown (v0.5.3 focus+clipboard). Prefer its text for fidelity,
+    // UNLESS the whole-turn DOM text is substantially longer — that means the
+    // copy button missed blocks (e.g. the preamble or canvas of a thinking
+    // response), so completeness wins.
+    let usedPath = 'wholeturn-dom';
     const copyBtn = findMessageCopyButton(lastResponse);
-
     if (copyBtn) {
       const result = await new Promise((resolve) => {
         try {
@@ -637,34 +696,16 @@ function watchForResponse() {
         } catch (e) { resolve({ ok: false, error: e.message }); }
       });
       if (result && result.ok && result.text && result.text.length > 10) {
-        capturedText = result.text;
-        usedPath = 'copy-button-focus-clipboard';
+        if (capturedText.length > result.text.length * 1.3) {
+          usedPath = 'wholeturn-dom(copy-missed-blocks)';
+        } else {
+          capturedText = result.text;
+          usedPath = 'copy-button-focus-clipboard';
+        }
       } else {
         DEBUG && console.log('[MindM3rge] CAPTURE_VIA_FOCUS failed:', result?.error || 'unknown',
-                              '— falling back to DOM extraction');
+                              '— using whole-turn DOM text');
       }
-    } else {
-      DEBUG && console.log('[MindM3rge] no copy button found yet — using DOM fallback if prose is substantial');
-    }
-
-    // FALLBACK PATH: scrape .markdown innerText, but gate on prose
-    // length so we don't grab a streaming-intro snippet.
-    if (!capturedText) {
-      const text = lastResponse.innerText || lastResponse.textContent;
-      if (!text || text.length <= 10) return;
-      const { prose } = extractProse(lastResponse);
-      // If the copy button DIDN'T exist (probable "still loading"
-      // signal), require a higher prose threshold to make sure we're
-      // not capturing intro fragments. If the copy button DID exist
-      // but intercept failed (CSP), trust that the response is done
-      // and accept any non-trivial text.
-      const minProse = copyBtn ? 50 : 200;
-      if (prose.length < minProse) {
-        DEBUG && console.log('[MindM3rge] prose too short (' + prose.length + ' < ' + minProse + '), waiting');
-        return;
-      }
-      capturedText = text;
-      usedPath = copyBtn ? 'dom-fallback-after-copy-click' : 'dom-fallback-no-copy-button';
     }
 
     DEBUG && console.log('[MindM3rge] capturing via ' + usedPath + ', text_len=' + capturedText.length);
@@ -721,7 +762,9 @@ function watchForResponse() {
       isWaitingForResponse = false;
       const responses = findAll('response');
       if (responses.length > 0) {
-        const text = responses[responses.length - 1].innerText || '';
+        // v0.6.0 — whole-turn text here too, not just the last block.
+        const text = getLastAssistantTurnText() ||
+                     responses[responses.length - 1].innerText || '';
         if (text.length > 10 && text !== lastResponseText) {
           lastResponseText = text;
           chrome.runtime.sendMessage({
