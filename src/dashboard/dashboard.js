@@ -339,13 +339,28 @@ document.getElementById('paste-submit')?.addEventListener('click', async () => {
 // pending turn changes, so the 1.5s poll loop doesn't wipe out text the user
 // is typing into the confirm textarea.
 let confirmShownFor = null;
-function showConfirmModal(pc) {
+function showConfirmModal(session) {
+  const pc = session.pendingConfirmation;
   const modal = document.getElementById('confirm-modal');
-  if (!modal) return;
+  if (!modal || !pc) return;
   if (confirmShownFor !== pc.turnIndex) {
-    document.getElementById('confirm-len').textContent = pc.length ?? 0;
-    document.getElementById('confirm-preview').textContent = pc.preview || '(empty)';
-    document.getElementById('confirm-textarea').value = '';
+    const manual = pc.reason === 'manual_mode';
+    const who = pc.modelName || pc.model || 'the model';
+    const fullContent = (session.turns?.[pc.turnIndex]?.content) || pc.preview || '';
+    document.getElementById('confirm-title').innerHTML = manual
+      ? `&#9995; Manual review &mdash; ${escapeHtml(who)}`
+      : '&#9888;&#65039; Check ChatGPT response';
+    document.getElementById('confirm-msg').innerHTML = manual
+      ? `Manual review mode is on. Review or edit <strong>${escapeHtml(who)}</strong>&rsquo;s response below before it carries forward to the next model.`
+      : `MindM3rge captured a suspiciously short ChatGPT response (<strong>${pc.length ?? 0} chars</strong>). This usually means only the &ldquo;thinking&rdquo; preamble was grabbed, not the full answer. The rotation is <strong>paused</strong>.`;
+    document.getElementById('confirm-preview').textContent = fullContent || '(empty)';
+    // Manual mode: prefill the textarea with the captured content so the user
+    // can edit in place. Short-guard mode: leave blank so they paste the real
+    // (missing) answer.
+    document.getElementById('confirm-textarea').value = manual ? fullContent : '';
+    document.getElementById('confirm-replace').textContent = manual
+      ? 'Use edited text — continue'
+      : 'Use pasted text — continue';
     confirmShownFor = pc.turnIndex;
   }
   modal.classList.remove('hidden');
@@ -354,6 +369,20 @@ function hideConfirmModal() {
   document.getElementById('confirm-modal')?.classList.add('hidden');
   confirmShownFor = null;
 }
+
+// v0.6.1 — Manual review mode toggle. Persisted in chrome.storage settings;
+// the background reads it live on every capture, so it can be flipped mid-run.
+(async function initManualModeToggle() {
+  const el = document.getElementById('manual-mode-toggle');
+  if (!el) return;
+  const { settings } = await chrome.storage.local.get('settings');
+  el.checked = !!(settings && settings.manualMode);
+  el.addEventListener('change', async () => {
+    const cur = (await chrome.storage.local.get('settings')).settings || {};
+    cur.manualMode = el.checked;
+    await chrome.storage.local.set({ settings: cur });
+  });
+})();
 
 // "Looks good" — accept the short capture as-is and resume the rotation.
 document.getElementById('confirm-looks-good')?.addEventListener('click', async () => {
@@ -705,7 +734,7 @@ function updateUI(session) {
   // suspiciously short ChatGPT capture, surface the confirm panel so the user
   // can accept it or paste the real answer before the rotation continues.
   if (session.status === 'awaiting_confirmation' && session.pendingConfirmation) {
-    showConfirmModal(session.pendingConfirmation);
+    showConfirmModal(session);
   } else {
     hideConfirmModal();
   }

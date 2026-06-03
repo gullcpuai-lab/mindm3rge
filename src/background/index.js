@@ -225,17 +225,24 @@ async function handleResponseCaptured(data, tab, opts = {}) {
     timestamp: new Date().toISOString(),
   });
 
-  // v0.6.0 short-result guard (ChatGPT only; skipped for user-supplied pastes).
-  // If the captured text is suspiciously short, pause and ask the user to
-  // verify before the rotation continues, so a preamble-only capture never
-  // silently propagates through the rest of the discussion.
-  if (model === 'chatgpt' && !opts.skipGuard && isSuspiciouslyShort(response)) {
+  // Pause for confirmation when either:
+  //  (a) v0.6.1 MANUAL REVIEW MODE is on — pause after EVERY captured response
+  //      (any model) so the user can review / edit / replace it before it
+  //      carries forward; or
+  //  (b) v0.6.0 SHORT-RESULT GUARD trips — a suspiciously short ChatGPT capture
+  //      (e.g. only the thinking preamble) that would otherwise propagate.
+  // User-supplied pastes (opts.skipGuard) bypass both.
+  const settings = await getSettings();
+  const manualMode = !!(settings && settings.manualMode);
+  const shortGuard = model === 'chatgpt' && isSuspiciouslyShort(response);
+  if (!opts.skipGuard && (manualMode || shortGuard)) {
+    const reason = shortGuard ? 'short_response' : 'manual_mode';
     session.status = 'awaiting_confirmation';
     session.pendingConfirmation = {
       turnIndex: session.turns.length - 1,
       model,
       modelName: MODEL_NAMES[model],
-      reason: 'short_response',
+      reason,
       length: (response || '').trim().length,
       preview: (response || '').trim().slice(0, 600),
       capturedAt: new Date().toISOString(),
@@ -245,8 +252,10 @@ async function handleResponseCaptured(data, tab, opts = {}) {
     chrome.notifications?.create({
       type: 'basic',
       iconUrl: '/public/icons/icon128.png',
-      title: 'MindM3rge — Check ChatGPT response',
-      message: `Captured only ${(response || '').trim().length} chars from ChatGPT. Paused for your confirmation.`,
+      title: reason === 'short_response' ? 'MindM3rge — Check ChatGPT response' : 'MindM3rge — Review response',
+      message: reason === 'short_response'
+        ? `Captured only ${(response || '').trim().length} chars from ChatGPT. Paused for your confirmation.`
+        : `Manual review: verify ${MODEL_NAMES[model] || model}'s response before continuing.`,
     });
     return { ok: true, awaitingConfirmation: true };
   }
