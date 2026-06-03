@@ -702,20 +702,31 @@ function updateUI(session) {
   // Hide skeleton once we have turns
   if (session.turns.length > 0) hideSkeleton();
 
-  // Add new turns
-  if (session.turns.length > lastTurnCount) {
-    const feed = document.getElementById('discussion-feed');
-    for (let i = lastTurnCount; i < session.turns.length; i++) {
-      const turn = session.turns[i];
-      // Pass the actual array index so the edit handler can target
-      // the right turn when sending EDIT_TURN to the background.
+  // v0.6.2 — Reconcile rendered cards against session.turns instead of the old
+  // lastTurnCount incremental append. The append-only approach desynced when a
+  // turn's content was edited/replaced (the card kept showing stale text) and
+  // could DROP already-rendered cards if lastTurnCount got out of step (e.g. a
+  // dashboard reload mid-session, or modal interleaving) — making a prior turn
+  // "disappear" and new turns stop showing ("stuck"). Reconciling is robust:
+  // create any missing card, and re-render any card whose content changed
+  // (e.g. after a manual-review edit or the short-result replace).
+  const feed = document.getElementById('discussion-feed');
+  let appended = false;
+  for (let i = 0; i < session.turns.length; i++) {
+    const turn = session.turns[i];
+    const existing = feed.querySelector(`[data-turn-index="${i}"]`);
+    if (!existing) {
       feed.appendChild(createTurnCard(turn, i));
+      appended = true;
+    } else if (existing.dataset.content !== (turn.content || '') &&
+               !existing.classList.contains('editing')) {
+      // Content changed (edited/replaced) — re-render this card in place so the
+      // new text shows, preserving collapse/edit affordances.
+      existing.replaceWith(createTurnCard(turn, i));
     }
-    lastTurnCount = session.turns.length;
-
-    // Scroll to bottom
-    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   }
+  lastTurnCount = session.turns.length;
+  if (appended) window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 
   // Update timeline
   updateTimeline(session);

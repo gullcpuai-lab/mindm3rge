@@ -212,6 +212,21 @@ async function handleResponseCaptured(data, tab, opts = {}) {
 
   if (!session || session.status !== 'running') return { ok: false };
 
+  // v0.6.2 — reject stray / cross-tab / late captures: only accept a response
+  // from the model whose turn is currently ACTIVE. Otherwise a leftover
+  // response in another model's tab (e.g. from a previous run, a stale content
+  // script after an extension reload, or a previous turn's observer firing
+  // late) gets recorded under the wrong model with the current step's role —
+  // which corrupts the whole rotation. Observed: a ChatGPT preamble left in a
+  // background tab was recorded as the "initial" turn while Claude was the
+  // active starter, so getNextAction then mis-routed back to ChatGPT and the
+  // turn order/labels broke. FORCE_CAPTURE and MANUAL_RESPONSE pass the current
+  // model, so they always match this guard.
+  if (model !== session.currentModel) {
+    DEBUG && console.warn(`[MindM3rge] ignoring stray ${model} capture — active model is ${session.currentModel}`);
+    return { ok: false, ignored: true, reason: 'model-mismatch', expected: session.currentModel, got: model };
+  }
+
   // Record this turn — including the prompt that was actually sent to this
   // model, so the dashboard can render Prompts+Responses exports and prove
   // the chain of context is being passed between models round-to-round.
