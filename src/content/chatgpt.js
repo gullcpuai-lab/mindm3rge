@@ -722,7 +722,7 @@ function watchForResponse() {
     isWaitingForResponse = false;
     chrome.runtime.sendMessage({
       type: 'RESPONSE_CAPTURED',
-      data: { model: 'chatgpt', response: capturedText },
+      data: { model: 'chatgpt', response: capturedText, capturePath: usedPath, sourceUrl: location.href },
     });
   }
 
@@ -769,7 +769,7 @@ function watchForResponse() {
           lastResponseText = text;
           chrome.runtime.sendMessage({
             type: 'RESPONSE_CAPTURED',
-            data: { model: 'chatgpt', response: text },
+            data: { model: 'chatgpt', response: text, capturePath: 'timeout-fallback', sourceUrl: location.href },
           });
           return;
         }

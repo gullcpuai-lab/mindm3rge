@@ -384,6 +384,70 @@ function hideConfirmModal() {
   });
 })();
 
+// v0.6.3 — Diagnostics / bug report. Compiles a shareable markdown report of
+// the run: per-turn capture metadata, the capture-vs-edit (X->Y) delta,
+// conversation links, and the event log — so copy/paste issues can be debugged.
+function buildDiagnosticsReport(session, settings) {
+  const v = (chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '?';
+  const L = [];
+  L.push('# MindM3rge Diagnostics Report', '');
+  L.push(`- Generated: ${new Date().toISOString()}`);
+  L.push(`- Extension version: ${v}`);
+  L.push(`- Session: ${session.id} (status: ${session.status})`);
+  L.push(`- Models: ${(session.modelOrder || []).join(' → ')} | starter: ${session.starterModel} | passes: ${session.passes}`);
+  L.push(`- Manual review mode: ${settings && settings.manualMode ? 'ON' : 'off'}`);
+  L.push(`- Current: step=${session.currentStep} model=${session.currentModel} pass=${session.currentPass}`);
+  if (session.pendingConfirmation) L.push(`- Paused awaiting confirmation: ${JSON.stringify(session.pendingConfirmation)}`);
+  L.push('', '## Prompt', '```', session.originalPrompt || session.prompt || '', '```');
+  if (session.goal) L.push('## Goal', '```', session.goal, '```');
+  L.push('', `## Turns (${(session.turns || []).length})`);
+  (session.turns || []).forEach((t, i) => {
+    const capLen = (t.originalContent ?? t.content ?? '').trim().length;
+    const finLen = (t.content ?? '').trim().length;
+    const d = finLen - capLen;
+    L.push('', `### Turn ${i} — ${t.modelName || t.model} / ${t.role} / R${t.round}`);
+    L.push(`- Source: ${t.sourceUrl || '(unknown)'}`);
+    L.push(`- Captured at: ${t.capturedAt || t.timestamp || '?'} | capture path: ${t.capturePath || '(n/a)'}`);
+    L.push(`- Edited: ${t.userEdited ? `YES (reason: ${t.editReason || '?'}, at ${t.editedAt || '?'})` : 'no'}`);
+    L.push(`- Lengths — captured: ${capLen} | final: ${finLen} | delta: ${d >= 0 ? '+' : ''}${d}`);
+    if (t.userEdited && t.originalContent != null && t.originalContent !== t.content) {
+      L.push('- CAPTURED (auto, X):', '```', t.originalContent, '```');
+      L.push('- FINAL (after edit, Y):', '```', t.content || '', '```');
+    } else {
+      L.push('- Content:', '```', t.content || '', '```');
+    }
+  });
+  const ev = session.diagnostics || [];
+  L.push('', `## Event log (${ev.length})`);
+  ev.forEach((e) => {
+    const { t, type, ...rest } = e;
+    L.push(`- ${t} [${type}] ${JSON.stringify(rest)}`);
+  });
+  return L.join('\n');
+}
+
+document.getElementById('bug-report-btn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('bug-report-btn');
+  const status = await chrome.runtime.sendMessage({ type: 'GET_STATUS' });
+  const session = status?.session;
+  if (!session) { btn.textContent = 'No session'; setTimeout(() => { btn.innerHTML = '&#9211; Report'; }, 2000); return; }
+  const { settings } = await chrome.storage.local.get('settings');
+  const report = buildDiagnosticsReport(session, settings);
+  // Download as .md
+  const blob = new Blob([report], { type: 'text/markdown' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mindm3rge-diagnostics-${(session.id || 'session')}.md`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  // Copy to clipboard too
+  let copied = false;
+  try { await navigator.clipboard.writeText(report); copied = true; } catch {}
+  btn.textContent = copied ? 'Saved + copied ✓' : 'Saved ✓';
+  setTimeout(() => { btn.innerHTML = '&#9211; Report'; }, 2500);
+});
+
 // "Looks good" — accept the short capture as-is and resume the rotation.
 document.getElementById('confirm-looks-good')?.addEventListener('click', async () => {
   const btn = document.getElementById('confirm-looks-good');

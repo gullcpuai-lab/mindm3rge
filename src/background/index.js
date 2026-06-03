@@ -206,6 +206,16 @@ function isSuspiciouslyShort(text) {
   return false;
 }
 
+// v0.6.3 — diagnostics event log. Records what happened during a run (captures,
+// stray rejections, guard pauses, edits with their X->Y delta, advances) onto
+// session.diagnostics so the user can export a bug report for debugging the
+// copy/paste issues. Mutates session; the caller is responsible for saving.
+function logDiag(session, type, details = {}) {
+  if (!session.diagnostics) session.diagnostics = [];
+  session.diagnostics.push({ t: new Date().toISOString(), type, ...details });
+  if (session.diagnostics.length > 300) session.diagnostics = session.diagnostics.slice(-300);
+}
+
 async function handleResponseCaptured(data, tab, opts = {}) {
   const { model, response } = data;
   const session = await getSession();
@@ -224,20 +234,38 @@ async function handleResponseCaptured(data, tab, opts = {}) {
   // model, so they always match this guard.
   if (model !== session.currentModel) {
     DEBUG && console.warn(`[MindM3rge] ignoring stray ${model} capture — active model is ${session.currentModel}`);
+    logDiag(session, 'capture_ignored', {
+      got: model, expected: session.currentModel,
+      len: (response || '').trim().length, sourceUrl: tab?.url || null,
+    });
+    await saveSession(session);
     return { ok: false, ignored: true, reason: 'model-mismatch', expected: session.currentModel, got: model };
   }
 
   // Record this turn — including the prompt that was actually sent to this
   // model, so the dashboard can render Prompts+Responses exports and prove
   // the chain of context is being passed between models round-to-round.
+  // v0.6.3 — also stash diagnostics: the originally-captured text (so we can
+  // show the X->Y delta if the user later edits it), the conversation URL of
+  // the model tab, and how it was captured.
+  const nowTs = new Date().toISOString();
   session.turns.push({
     model,
     modelName: MODEL_NAMES[model],
     role: session.currentStep,
     round: session.currentPass,
     content: response,
+    originalContent: response,           // auto-captured text (X), preserved across edits
+    sourceUrl: tab?.url || null,         // the model conversation link
+    capturePath: data.capturePath || null,
     promptSent: session.lastPromptSent || session.prompt,
-    timestamp: new Date().toISOString(),
+    timestamp: nowTs,
+    capturedAt: nowTs,
+  });
+  logDiag(session, 'capture', {
+    model, role: session.currentStep, round: session.currentPass,
+    len: (response || '').trim().length,
+    capturePath: data.capturePath || null, sourceUrl: tab?.url || null,
   });
 
   // Pause for confirmation when either:
@@ -262,6 +290,7 @@ async function handleResponseCaptured(data, tab, opts = {}) {
       preview: (response || '').trim().slice(0, 600),
       capturedAt: new Date().toISOString(),
     };
+    logDiag(session, 'paused', { reason, model, len: (response || '').trim().length });
     await saveSession(session);
     chrome.runtime.sendMessage({ type: 'CONFIRMATION_REQUIRED', session });
     chrome.notifications?.create({
@@ -286,6 +315,7 @@ async function advanceSession(session) {
   if (nextAction.done) {
     // Discussion complete
     session.status = 'complete';
+    logDiag(session, 'complete', { turns: session.turns.length });
     await saveSession(session);
     await saveToHistory(session);
 
@@ -309,6 +339,7 @@ async function advanceSession(session) {
   session.currentModel = nextAction.model;
   session.currentPass = nextAction.pass;
   session.lastPromptSent = nextAction.prompt;
+  logDiag(session, 'advance', { toModel: nextAction.model, step: nextAction.step, pass: nextAction.pass });
   await saveSession(session);
 
   // Send the next prompt to the next model (with files if first time)
@@ -334,9 +365,16 @@ async function handleReplaceAndContinue(responseText) {
   if (!session || session.status !== 'awaiting_confirmation') return { ok: false };
   const pc = session.pendingConfirmation;
   if (pc && typeof pc.turnIndex === 'number' && session.turns[pc.turnIndex]) {
-    session.turns[pc.turnIndex].content = responseText;
-    session.turns[pc.turnIndex].userEdited = true;
-    session.turns[pc.turnIndex].editedAt = new Date().toISOString();
+    const turn = session.turns[pc.turnIndex];
+    const fromLen = (turn.content || '').trim().length;
+    turn.content = responseText;
+    turn.userEdited = true;
+    turn.editedAt = new Date().toISOString();
+    turn.editReason = pc.reason || 'manual_replace';   // 'short_response' | 'manual_mode'
+    logDiag(session, 'edited', {
+      turnIndex: pc.turnIndex, model: turn.model, reason: turn.editReason,
+      fromLen, toLen: (responseText || '').trim().length,
+    });
   }
   session.status = 'running';
   delete session.pendingConfirmation;
@@ -637,9 +675,18 @@ async function handleEditTurn(turnIndex, newContent) {
     return { ok: false, error: 'turnIndex out of range' };
   }
   const turn = session.turns[turnIndex];
+  const fromLen = (turn.content || '').trim().length;
+  // Preserve the auto-captured text the first time a turn is edited so the
+  // diagnostics report can show the X->Y delta even for inline card edits.
+  if (turn.originalContent == null) turn.originalContent = turn.content;
   turn.content = newContent;
   turn.userEdited = true;
   turn.editedAt = new Date().toISOString();
+  turn.editReason = turn.editReason || 'inline_edit';
+  logDiag(session, 'edited', {
+    turnIndex, model: turn.model, reason: 'inline_edit',
+    fromLen, toLen: (newContent || '').trim().length,
+  });
   await saveSession(session);
   return { ok: true, turnIndex, length: newContent.length };
 }
