@@ -83,34 +83,84 @@ injectClipboardInterceptor();
 // We then verify the button is positioned BELOW the assistant turn
 // (the toolbar always renders below the message body, not inside it).
 function findMessageCopyButton(assistantTurn) {
-  const candidates = [
-    'button[data-testid="copy-turn-action-button"]',
-    'button[data-testid="copy-message-action-button"]',
-    'button[data-testid="copy-button"]',
+  // v0.5.7 — priority-ordered + scoped lookup. The pre-v0.5.7 version
+  // matched every selector equally and returned the LAST hit in
+  // document order. That worked for simple responses but failed for
+  // responses with inline section / heading / "ChatGPT said" wrapper
+  // copy buttons — the section-level button would be last in document
+  // order, and clicking it copied only that section, not the whole
+  // message. User-reported bug: "it picked up just the first part of
+  // the response" because the LAST copy button in DOM order was an
+  // inline button for a sub-section, not the message-level toolbar.
+  //
+  // Fix: prefer message-level `data-testid="copy-turn-action-button"`
+  // (and the older `copy-message-action-button`) over generic selectors.
+  // Scope the search to the assistant turn container's vicinity so we
+  // don't accidentally pull a button from a different message or the
+  // composer toolbar.
+  const PRIORITY = [
+    'button[data-testid="copy-turn-action-button"]',     // ChatGPT current — message-level
+    'button[data-testid="copy-message-action-button"]',  // older — message-level
+    'button[aria-label="Copy response"]',                // message-level by aria
+    'button[aria-label="Copy message"]',                 // message-level by aria
+  ];
+  const FALLBACK = [
     'button[data-testid$="copy-response"]',
-    'button[aria-label="Copy"]',
-    'button[aria-label="Copy response"]',
-    'button[aria-label="Copy message"]',
+    'button[data-testid="copy-button"]',                 // generic — last resort
+    'button[aria-label="Copy"]',                         // generic — last resort
     'button[aria-label*="Copy" i][aria-label*="response" i]',
   ];
-  const all = [];
-  for (const sel of candidates) {
+
+  // Try to climb from the .markdown / response element up to the
+  // [data-message-author-role="assistant"] wrapper. The toolbar with
+  // the Copy response button sits adjacent to (not inside) .markdown,
+  // so we widen to the wrapper's parent subtree.
+  let container = null;
+  try {
+    container = assistantTurn && assistantTurn.closest
+      ? assistantTurn.closest('[data-message-author-role="assistant"]')
+      : null;
+  } catch (e) {}
+  if (!container) {
+    const all = document.querySelectorAll('[data-message-author-role="assistant"]');
+    container = all.length > 0 ? all[all.length - 1] : null;
+  }
+  const scope = (container && container.parentElement) || container || document;
+
+  const collect = (selector, where) => {
+    const out = [];
     try {
-      const els = document.querySelectorAll(sel);
-      for (const el of els) {
-        if (el.closest('pre')) continue;        // code-block copy — skip
+      for (const el of where.querySelectorAll(selector)) {
+        if (el.closest('pre')) continue;                                    // code-block copy
         const aria = (el.getAttribute('aria-label') || '').toLowerCase();
-        if (aria.includes('table')) continue;
-        if (aria.includes('code')) continue;
-        if (aria.includes('link')) continue;
-        all.push(el);
+        if (aria.includes('table') || aria.includes('code') || aria.includes('link')) continue;
+        out.push(el);
       }
     } catch (e) {}
+    return out;
+  };
+
+  // 1. Priority selectors, scoped to the assistant turn vicinity.
+  for (const sel of PRIORITY) {
+    const found = collect(sel, scope);
+    if (found.length > 0) return found[found.length - 1];
   }
-  if (all.length === 0) return null;
-  // Return the LAST one in document order — that's the most recent
-  // assistant message's copy button.
-  return all[all.length - 1];
+  // 2. Priority selectors, document-wide (in case scope climb failed).
+  for (const sel of PRIORITY) {
+    const found = collect(sel, document);
+    if (found.length > 0) return found[found.length - 1];
+  }
+  // 3. Fallback selectors, scoped.
+  for (const sel of FALLBACK) {
+    const found = collect(sel, scope);
+    if (found.length > 0) return found[found.length - 1];
+  }
+  // 4. Fallback selectors, document-wide.
+  for (const sel of FALLBACK) {
+    const found = collect(sel, document);
+    if (found.length > 0) return found[found.length - 1];
+  }
+  return null;
 }
 
 const SELECTORS = {
