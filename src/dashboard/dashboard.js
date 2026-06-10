@@ -286,11 +286,21 @@ document.getElementById('start-btn').addEventListener('click', async () => {
       document.getElementById('setup-section').classList.add('hidden');
       document.getElementById('discussion-section').classList.remove('hidden');
       startPolling();
+    } else {
+      // Background returned a failure (or no response) — never leave the button
+      // stuck on "Starting…". Reset and surface why.
+      console.error('Start failed:', response);
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('start-btn').textContent = 'Start Discussion';
+      alert(response?.error
+        ? `Couldn't start the discussion:\n\n${response.error}\n\nIf this involved large files, try fewer/smaller files or paste the key text into the prompt.`
+        : "Couldn't start the discussion. Make sure you're logged in to the selected model(s) in this browser, then try again.");
     }
   } catch (err) {
     console.error('Failed to start:', err);
     document.getElementById('start-btn').disabled = false;
     document.getElementById('start-btn').textContent = 'Start Discussion';
+    alert('Couldn\'t start the discussion: ' + ((err && err.message) || err));
   }
 });
 
@@ -475,10 +485,12 @@ document.getElementById('confirm-replace')?.addEventListener('click', async () =
 // Retry current model in a fresh chat
 document.getElementById('retry-model-btn')?.addEventListener('click', async () => {
   const btn = document.getElementById('retry-model-btn');
+  // Stay clickable while retrying: clicking "Retrying..." again restarts the
+  // retry for this model (e.g. if the first attempt stalled or opened a bad tab).
   btn.textContent = 'Retrying...';
-  btn.disabled = true;
+  if (btn._revertTimer) clearTimeout(btn._revertTimer);
   await chrome.runtime.sendMessage({ type: 'RETRY_MODEL' });
-  setTimeout(() => { btn.textContent = 'Retry'; btn.disabled = false; }, 5000);
+  btn._revertTimer = setTimeout(() => { btn.textContent = 'Retry'; }, 5000);
 });
 
 // Skip current model and continue discussion
@@ -975,11 +987,14 @@ function createTurnCard(turn, turnIndex) {
   // Retry button (9)
   card.querySelector('.retry').addEventListener('click', async () => {
     const retryBtn = card.querySelector('.retry');
+    // Stay clickable while retrying: clicking again restarts the retry for THIS
+    // turn/model instead of being blocked until the timer clears.
     retryBtn.classList.add('retrying');
+    if (retryBtn._revertTimer) clearTimeout(retryBtn._revertTimer);
     try {
       await chrome.runtime.sendMessage({ type: 'RETRY_TURN', turnIndex: turn.index });
     } catch {}
-    setTimeout(() => retryBtn.classList.remove('retrying'), 3000);
+    retryBtn._revertTimer = setTimeout(() => retryBtn.classList.remove('retrying'), 3000);
   });
 
   // Edit button — inline textarea so the user can override the captured

@@ -582,7 +582,9 @@
     /* ═══ Retry button (9) ═══ */
     .turn-act.retry { font-size: 13px; }
     .turn-act.retry:hover { color: var(--green); }
-    .retrying { opacity: 0.5; pointer-events: none; }
+    /* Dimmed to show retry is in flight, but still clickable so the user can
+       click again to restart the retry for that model. */
+    .retrying { opacity: 0.6; cursor: pointer; }
     .retrying::after { content: ' Retrying...'; font-size: 10px; color: var(--accent); }
 
     /* ═══ Streaming indicator (5) ═══ */

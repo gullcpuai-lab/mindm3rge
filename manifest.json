@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "MindM3rge — AI Multi-Model Validator",
-  "version": "0.6.3",
+  "version": "0.6.6",
   "description": "Submit one prompt, have multiple AI models critique and validate each other's reasoning.",
   "permissions": [
     "activeTab",
@@ -9,13 +9,16 @@
     "tabs",
     "scripting",
     "notifications",
-    "clipboardRead"
+    "clipboardRead",
+    "unlimitedStorage"
   ],
   "host_permissions": [
     "https://claude.ai/*",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
-    "https://gemini.google.com/*"
+    "https://gemini.google.com/*",
+    "http://localhost:4011/*",
+    "http://100.74.6.101:4011/*"
   ],
   "background": {
     "service_worker": "src/background/index.js",

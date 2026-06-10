@@ -182,12 +182,18 @@ async function handleStartSession(data) {
   // Track the prompt actually sent so the dashboard can show it later.
   session.lastPromptSent = initialPrompt;
 
-  await saveSession(session);
-
-  // Send just the user's question to the starter model (no meta-instructions)
-  await sendToModel(starterModel, initialPrompt, session.files);
-
-  return { ok: true, sessionId: session.id };
+  // Always resolve with a result — if anything throws (storage quota from large
+  // file payloads, tab/messaging failure), return {ok:false} so the dashboard
+  // resets instead of sitting on "Starting…" forever.
+  try {
+    await saveSession(session);
+    // Send just the user's question to the starter model (no meta-instructions)
+    await sendToModel(starterModel, initialPrompt, session.files);
+    return { ok: true, sessionId: session.id };
+  } catch (e) {
+    console.error('[MindM3rge] handleStartSession failed:', e);
+    return { ok: false, error: String((e && e.message) || e) };
+  }
 }
 
 // v0.6.0 — Short-result guard thresholds. ChatGPT capture can still grab only
@@ -566,14 +572,28 @@ async function sendToModel(model, prompt, files) {
   }
 
   if (needsLoad) {
-    // Wait for page to load
+    // Wait for the page to finish loading. Three ways out, so this can NEVER
+    // hang "Starting…" forever: (1) the onUpdated 'complete' event, (2) an
+    // immediate check in case the page already completed before the listener
+    // attached (the race that wedged it), (3) a hard 30s timeout.
     await new Promise(resolve => {
-      chrome.tabs.onUpdated.addListener(function listener(tabId, info) {
-        if (tabId === tab.id && info.status === 'complete') {
-          chrome.tabs.onUpdated.removeListener(listener);
-          resolve();
-        }
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        chrome.tabs.onUpdated.removeListener(listener);
+        clearTimeout(timeoutId);
+        resolve();
+      };
+      function listener(tabId, info) {
+        if (tabId === tab.id && info.status === 'complete') finish();
+      }
+      chrome.tabs.onUpdated.addListener(listener);
+      // Race guard: the tab may already be 'complete' before we listened.
+      chrome.tabs.get(tab.id, (t) => {
+        if (!chrome.runtime.lastError && t && t.status === 'complete') finish();
       });
+      const timeoutId = setTimeout(finish, 30000);
     });
     // Extra wait for JS to initialize
     await new Promise(r => setTimeout(r, 3000));
