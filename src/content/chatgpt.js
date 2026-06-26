@@ -203,6 +203,8 @@ const SELECTORS = {
     '#upload-files', '#upload-photos', 'input[type="file"]',
   ],
   uploadButton: [
+    '#composer-plus-btn', 'button[data-testid="composer-plus-btn"]',
+    'button[aria-label="Add files and more"]',
     'button[aria-label="Attach files"]', '#composer-actions-button',
   ],
 };
@@ -514,6 +516,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// Wait until `expected` uploaded-file previews render (or timeout) so we never
+// send the prompt mid-upload and drop files. Counts known chip elements AND
+// visible filename occurrences. Returns the highest count observed.
+async function waitForUploads(expected, fileNames, chipSelectors, timeoutMs) {
+  timeoutMs = timeoutMs || 45000;
+  const prefixes = (fileNames || [])
+    .map(n => { const b = (n.split('.')[0] || n); return b.length >= 4 ? b.slice(0, 14) : null; })
+    .filter(Boolean);
+  const start = Date.now();
+  let best = 0;
+  while (Date.now() - start < timeoutMs) {
+    let chips = 0;
+    for (const sel of (chipSelectors || [])) {
+      try { chips = Math.max(chips, document.querySelectorAll(sel).length); } catch (e) {}
+    }
+    let names = 0;
+    if (prefixes.length) {
+      const t = document.body ? (document.body.innerText || '') : '';
+      names = prefixes.filter(p => t.includes(p)).length;
+    }
+    best = Math.max(best, chips, names);
+    if (best >= expected) return best;
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return best;
+}
+
 async function uploadFilesThenPrompt(files, prompt) {
   // ChatGPT uses a + button to open an upload menu, then #upload-files for docs
   const plusBtn = find('uploadButton').el;
@@ -543,9 +572,14 @@ async function uploadFilesThenPrompt(files, prompt) {
       dt.items.add(file);
     }
     fileInput.files = dt.files;
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    DEBUG && console.log('[MindM3rge] Uploaded', files.length, 'files to ChatGPT via', fileInput.id || 'input[type="file"]');
-    await new Promise(r => setTimeout(r, 3000));
+    const got = await waitForUploads(files.length, files.map(f => f.name),
+      ['[data-testid="image-thumbnail-static-wrapper"]', '[data-testid*="attachment"]', '[data-testid*="thumbnail"]']);
+    DEBUG && console.log('[MindM3rge] ChatGPT uploads rendered', got, 'of', files.length, 'via', fileInput.id || 'input');
+    if (got < files.length) {
+      reportBroken('fileInput', { context: 'upload incomplete (race)', got, expected: files.length });
+    }
   } else {
     DEBUG && console.log('[MindM3rge] No file input found on ChatGPT');
     reportBroken('fileInput', { context: 'upload attempt' });

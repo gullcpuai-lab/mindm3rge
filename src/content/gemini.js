@@ -20,10 +20,18 @@ const SELECTORS = {
     'button[aria-label="Stop"]',
   ],
   uploadButton: [
-    'button[aria-label="Open upload file menu"]', 'button[aria-label*="upload"]',
+    // Gemini renamed this to "Upload & tools" (capital U) — the old
+    // [aria-label*="upload"] selector is CASE-SENSITIVE and silently missed it,
+    // which is why Gemini uploaded nothing. Use the exact label + a case-
+    // insensitive ("i") fallback.
+    'button[aria-label="Upload & tools"]', 'button[aria-label*="upload" i]',
+    'button[aria-label="Open upload file menu"]',
   ],
   uploadFilesButton: [
-    'button[aria-label*="Upload files"]',
+    // The "Upload files" entry is a role=menuitem (not a <button>).
+    '[role="menuitem"][aria-label*="Upload files" i]',
+    '[role="menuitem"][aria-label*="upload files" i]',
+    'button[aria-label*="Upload files" i]',
   ],
   fileInput: ['input[type="file"]'],
 };
@@ -120,22 +128,64 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// Wait until `expected` uploaded-file previews render (or timeout). Counts known
+// chip elements AND visible filename occurrences. Returns the highest count seen.
+async function waitForUploads(expected, fileNames, chipSelectors, timeoutMs) {
+  timeoutMs = timeoutMs || 12000;
+  const prefixes = (fileNames || [])
+    .map(n => { const b = (n.split('.')[0] || n); return b.length >= 4 ? b.slice(0, 14) : null; })
+    .filter(Boolean);
+  const start = Date.now();
+  let best = 0;
+  while (Date.now() - start < timeoutMs) {
+    let chips = 0;
+    for (const sel of (chipSelectors || [])) {
+      try { chips = Math.max(chips, document.querySelectorAll(sel).length); } catch (e) {}
+    }
+    let names = 0;
+    if (prefixes.length) {
+      const t = document.body ? (document.body.innerText || '') : '';
+      names = prefixes.filter(p => t.includes(p)).length;
+    }
+    best = Math.max(best, chips, names);
+    if (best >= expected) return best;
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return best;
+}
+
+function buildDataTransfer(files) {
+  const dt = new DataTransfer();
+  for (const f of files) {
+    const binary = atob(f.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: f.mimeType || 'application/octet-stream' });
+    dt.items.add(new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' }));
+  }
+  return dt;
+}
+
+const GEMINI_CHIP_SELECTORS = [
+  'uploader-file-preview', '[data-test-id*="file-preview"]',
+  '[data-test-id*="attachment"]', 'xap-uploaded-file', '[file-name]',
+];
+
 async function uploadFilesThenPrompt(files, prompt) {
-  let uploaded = false;
   let fileInput = find('fileInput').el;
 
-  // Step 1: Click the upload menu button (+ button) to open the upload menu
+  // Step 1: open the "Upload & tools" menu (selector was stale + case-sensitive).
   if (!fileInput) {
     const openMenuBtn = find('uploadButton').el;
     if (openMenuBtn) {
       openMenuBtn.click();
       await new Promise(r => setTimeout(r, 1000));
     } else {
-      reportBroken('uploadButton', { context: 'upload attempt - menu button not found' });
+      reportBroken('uploadButton', { context: 'upload - "Upload & tools" menu button not found' });
     }
   }
 
-  // Step 2: Click "Upload files" in the menu that appeared
+  // Step 2: click the "Upload files" menuitem to reveal the file input.
   if (!fileInput) {
     const uploadFilesBtn = find('uploadFilesButton').el;
     if (uploadFilesBtn) {
@@ -143,33 +193,43 @@ async function uploadFilesThenPrompt(files, prompt) {
       await new Promise(r => setTimeout(r, 1000));
       fileInput = find('fileInput').el;
     } else {
-      reportBroken('uploadFilesButton', { context: 'upload attempt - upload files button not found in menu' });
+      reportBroken('uploadFilesButton', { context: 'upload - "Upload files" menu item not found' });
     }
   }
 
+  let got = 0;
+
+  // Mechanism A: assign to the input + dispatch change (works on Claude/ChatGPT).
   if (fileInput) {
-    const dt = new DataTransfer();
-    for (const f of files) {
-      const binary = atob(f.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: f.mimeType || 'application/octet-stream' });
-      const file = new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' });
-      dt.items.add(file);
-    }
-    fileInput.files = dt.files;
+    fileInput.multiple = true;
+    fileInput.files = buildDataTransfer(files).files;
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    DEBUG && console.log('[MindM3rge] Uploaded', files.length, 'files to Gemini natively');
-    uploaded = true;
-    await new Promise(r => setTimeout(r, 2000));
+    got = await waitForUploads(files.length, files.map(f => f.name), GEMINI_CHIP_SELECTORS, 12000);
+    DEBUG && console.log('[MindM3rge] Gemini change-upload rendered', got, 'of', files.length);
   }
 
-  if (!uploaded) {
-    // Native upload failed — notify but don't inject binary content into prompt
-    DEBUG && console.log('[MindM3rge] Gemini native upload not available — files skipped');
-    reportBroken('fileInput', { context: 'upload attempt - native upload failed' });
+  // Mechanism B (fallback): Gemini often ignores the synthetic change event, so
+  // also try a drag-drop of the same files onto the composer.
+  if (got < files.length) {
+    const zone = find('input').el || document.querySelector('rich-textarea') || document.body;
+    if (zone) {
+      const dt = buildDataTransfer(files);
+      for (const type of ['dragenter', 'dragover', 'drop']) {
+        zone.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, composed: true, dataTransfer: dt }));
+      }
+      got = await waitForUploads(files.length, files.map(f => f.name), GEMINI_CHIP_SELECTORS, 10000);
+      DEBUG && console.log('[MindM3rge] Gemini drop-upload rendered', got, 'of', files.length);
+    }
+  }
+
+  // If Gemini still rejected the files (its uploader requires a trusted native
+  // event), tell the model in-prompt which files it is NOT seeing so the run
+  // still proceeds with that knowledge rather than silently missing context.
+  if (got < files.length) {
+    reportBroken('fileInput', { context: 'gemini upload not accepted', got, expected: files.length });
     const fileNames = files.map(f => f.name).join(', ');
-    prompt = prompt + `\n\n[Note: Files could not be uploaded to this model: ${fileNames}]`;
+    prompt = prompt + `\n\n[Note: ${files.length - got} of ${files.length} file(s) could not be attached to this model: ${fileNames}]`;
   }
 
   injectPrompt(prompt);

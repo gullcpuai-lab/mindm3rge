@@ -119,6 +119,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 
+// Wait until `expected` uploaded-file previews have actually rendered (or
+// timeout). This is the fix for the race where the prompt was sent before all
+// files finished uploading, dropping some of a multi-file batch. Robust across
+// DOM churn: counts BOTH known chip elements AND visible occurrences of the
+// uploaded filenames. Returns the highest count observed.
+async function waitForUploads(expected, fileNames, chipSelectors, timeoutMs) {
+  timeoutMs = timeoutMs || 45000;
+  const prefixes = (fileNames || [])
+    .map(n => { const b = (n.split('.')[0] || n); return b.length >= 4 ? b.slice(0, 14) : null; })
+    .filter(Boolean);
+  const start = Date.now();
+  let best = 0;
+  while (Date.now() - start < timeoutMs) {
+    let chips = 0;
+    for (const sel of (chipSelectors || [])) {
+      try { chips = Math.max(chips, document.querySelectorAll(sel).length); } catch (e) {}
+    }
+    let names = 0;
+    if (prefixes.length) {
+      const t = document.body ? (document.body.innerText || '') : '';
+      names = prefixes.filter(p => t.includes(p)).length;
+    }
+    best = Math.max(best, chips, names);
+    if (best >= expected) return best;
+    await new Promise(r => setTimeout(r, 400));
+  }
+  return best;
+}
+
 async function uploadFilesThenPrompt(files, prompt) {
   let fileInput = find('fileInput').el;
 
@@ -142,9 +171,18 @@ async function uploadFilesThenPrompt(files, prompt) {
       dt.items.add(file);
     }
     fileInput.files = dt.files;
+    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
     fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    DEBUG && console.log('[MindM3rge] Uploaded', files.length, 'files to Claude');
-    await new Promise(r => setTimeout(r, 2000));
+    // Gate the prompt+send on ALL files finishing — do not send a partial batch.
+    // Claude renders each attachment as a [data-testid="file-upload"] card
+    // (verified live) and does NOT put the filename in page text, so gate on the
+    // chip element, not the filename.
+    const got = await waitForUploads(files.length, files.map(f => f.name),
+      ['[data-testid="file-upload"]', '[data-testid="file-thumbnail"]', '[data-testid*="file"]']);
+    DEBUG && console.log('[MindM3rge] Claude uploads rendered', got, 'of', files.length);
+    if (got < files.length) {
+      reportBroken('fileInput', { context: 'upload incomplete (race)', got, expected: files.length });
+    }
   } else {
     DEBUG && console.log('[MindM3rge] No file input found on Claude');
     reportBroken('fileInput', { context: 'upload attempt' });

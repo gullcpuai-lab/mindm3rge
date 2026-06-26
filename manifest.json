@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "MindM3rge — AI Multi-Model Validator",
-  "version": "0.6.6",
+  "name": "MindM3rge \u2014 AI Multi-Model Validator",
+  "version": "0.6.7",
   "description": "Submit one prompt, have multiple AI models critique and validate each other's reasoning.",
   "permissions": [
     "activeTab",
@@ -18,7 +18,9 @@
     "https://chat.openai.com/*",
     "https://gemini.google.com/*",
     "http://localhost:4011/*",
-    "http://100.74.6.101:4011/*"
+    "http://100.74.6.101:4011/*",
+    "http://localhost:4012/*",
+    "http://127.0.0.1:4012/*"
   ],
   "background": {
     "service_worker": "src/background/index.js",
@@ -26,23 +28,36 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://claude.ai/*"],
-      "js": ["src/content/claude.js"],
+      "matches": [
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "src/content/claude.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://chatgpt.com/*", "https://chat.openai.com/*"],
-      "js": ["src/content/chatgpt.js"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "src/content/chatgpt.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://gemini.google.com/*"],
-      "js": ["src/content/gemini.js"],
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "src/content/gemini.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "MindM3rge — Open Dashboard"
+    "default_title": "MindM3rge \u2014 Open Dashboard"
   },
   "icons": {
     "16": "public/icons/icon16.png",
@@ -51,8 +66,13 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["src/dashboard/*", "src/popup/*"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "src/dashboard/*",
+        "src/popup/*"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ]
 }
