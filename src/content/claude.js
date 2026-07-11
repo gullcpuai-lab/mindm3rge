@@ -291,85 +291,76 @@ function injectPrompt(prompt) {
   watchForResponse();
 }
 
+// Activity-based waiting: keep waiting as long as the model shows a sign of
+// life (stop/generating button present OR the response text is still changing).
+// Only give up after a stretch of TOTAL silence (IDLE_TIMEOUT_MS), with a hard
+// 15-minute ceiling as an absolute backstop. No fixed countdown while it works.
+const IDLE_TIMEOUT_MS = 3 * 60 * 1000;   // give up only after 3 min with no activity
+const HARD_CEILING_MS = 15 * 60 * 1000;  // absolute backstop
+
 function watchForResponse() {
   const responseCountAtStart = findAll('response').length;
   let stableText = '';
   let stableCount = 0;
+  const startTs = Date.now();
+  let lastActivityTs = Date.now();
+  let lastTickText = '';
+
+  const timeoutCapture = (reason) => {
+    clearInterval(checkInterval);
+    isWaitingForResponse = false;
+    const responses = findAll('response');
+    if (responses.length > 0) {
+      const text = responses[responses.length - 1].innerText || '';
+      if (text.length > 10 && text !== lastResponseText) {
+        const fullResponse = text + captureArtifacts();
+        lastResponseText = text;
+        chrome.runtime.sendMessage({ type: 'RESPONSE_CAPTURED', data: { model: 'claude', response: fullResponse } });
+        return;
+      }
+    }
+    reportBroken('response', { context: reason });
+  };
 
   const checkInterval = setInterval(() => {
-    // Check if still generating
+    if (!isWaitingForResponse) { clearInterval(checkInterval); return; }
+    const now = Date.now();
+
     const stopBtn = find('stopButton').el;
-    if (stopBtn) {
-      stableCount = 0;
-      return;
-    }
-
-    // Skip error states — wait for retry
-    const errorEl = document.querySelector('[class*="error"], [class*="retry"]');
-    if (errorEl && errorEl.offsetParent !== null) {
-      stableCount = 0;
-      return;
-    }
-
-    // Get responses
     const responses = findAll('response');
-    if (responses.length === 0) return;
+    const curText = responses.length ? (responses[responses.length - 1].innerText || responses[responses.length - 1].textContent || '') : '';
+    // Sign of life → reset the idle clock (streaming, generating, or thinking).
+    if (stopBtn || curText !== lastTickText) lastActivityTs = now;
+    lastTickText = curText;
 
-    // Get text from the LAST response element
+    // Timers only bite when there's NO sign of life — or at the hard ceiling.
+    if (now - startTs > HARD_CEILING_MS) return timeoutCapture('hard ceiling: 15 min elapsed');
+    if (now - lastActivityTs > IDLE_TIMEOUT_MS) return timeoutCapture('idle: no activity for 3 min');
+
+    if (stopBtn) { stableCount = 0; return; }
+
+    const errorEl = document.querySelector('[class*="error"], [class*="retry"]');
+    if (errorEl && errorEl.offsetParent !== null) { stableCount = 0; return; }
+
+    if (responses.length === 0) return;
     const lastResponse = responses[responses.length - 1];
     const text = lastResponse.innerText || lastResponse.textContent;
     const isNew = responses.length > responseCountAtStart;
     const isChanged = text && text !== lastResponseText && text.length > 10;
 
     if ((isNew || isChanged) && text && text.length > 10) {
-      // Check stability — text must stay the same for 3 consecutive checks (3 seconds)
-      if (text === stableText) {
-        stableCount++;
-      } else {
-        stableText = text;
-        stableCount = 1;
-      }
+      if (text === stableText) stableCount++;
+      else { stableText = text; stableCount = 1; }
 
       if (stableCount >= 5) {
-        // Response is stable — capture it
         clearInterval(checkInterval);
-
-        // Also capture any artifact content (files Claude generated)
         const fullResponse = text + captureArtifacts();
-
         lastResponseText = text;
         isWaitingForResponse = false;
-
-        chrome.runtime.sendMessage({
-          type: 'RESPONSE_CAPTURED',
-          data: { model: 'claude', response: fullResponse },
-        });
+        chrome.runtime.sendMessage({ type: 'RESPONSE_CAPTURED', data: { model: 'claude', response: fullResponse } });
       }
     }
   }, 1000);
-
-  // Timeout after 5 minutes
-  setTimeout(() => {
-    if (isWaitingForResponse) {
-      clearInterval(checkInterval);
-      isWaitingForResponse = false;
-      // Try to capture whatever we have
-      const responses = findAll('response');
-      if (responses.length > 0) {
-        const text = responses[responses.length - 1].innerText || '';
-        if (text.length > 10 && text !== lastResponseText) {
-          const fullResponse = text + captureArtifacts();
-          lastResponseText = text;
-          chrome.runtime.sendMessage({
-            type: 'RESPONSE_CAPTURED',
-            data: { model: 'claude', response: fullResponse },
-          });
-          return;
-        }
-      }
-      reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
-    }
-  }, 300000);
 }
 
 function captureArtifacts() {

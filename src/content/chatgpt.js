@@ -712,6 +712,15 @@ function watchForResponse() {
 
   const STABILITY_MS = 3000;
 
+  // Activity-based waiting: wait as long as ChatGPT shows a sign of life (a
+  // mutation fired, or the stop button is present); only give up after
+  // IDLE_TIMEOUT_MS of total silence, with a hard 15-minute ceiling.
+  const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+  const HARD_CEILING_MS = 15 * 60 * 1000;
+  const startTs = Date.now();
+  let lastActivityTs = Date.now();
+  let timeoutChecker = null;
+
   // v0.6.0 anti-premature-capture state. The preamble->think pause leaves the
   // turn text momentarily STABLE (preamble done, answer not started). To avoid
   // locking onto it, require the captured length to hold steady across
@@ -798,6 +807,7 @@ function watchForResponse() {
     captured = true;
     clearInterval(checkInterval);
     clearTimeout(stabilityTimer);
+    if (timeoutChecker) clearInterval(timeoutChecker);
     if (observer) observer.disconnect();
     lastResponseText = capturedText;
     isWaitingForResponse = false;
@@ -809,6 +819,7 @@ function watchForResponse() {
 
   function resetStabilityTimer() {
     if (captured) return;
+    lastActivityTs = Date.now();  // a mutation fired → ChatGPT is doing something
     if (stabilityTimer) clearTimeout(stabilityTimer);
     stabilityTimer = setTimeout(tryCapture, STABILITY_MS);
   }
@@ -835,29 +846,36 @@ function watchForResponse() {
     DEBUG && console.warn('[MindM3rge] ChatGPT MutationObserver setup failed', e);
   }
 
-  setTimeout(() => {
-    if (isWaitingForResponse) {
-      clearInterval(checkInterval);
-      clearTimeout(stabilityTimer);
-      if (observer) observer.disconnect();
-      isWaitingForResponse = false;
-      const responses = findAll('response');
-      if (responses.length > 0) {
-        // v0.6.0 — whole-turn text here too, not just the last block.
-        const text = getLastAssistantTurnText() ||
-                     responses[responses.length - 1].innerText || '';
-        if (text.length > 10 && text !== lastResponseText) {
-          lastResponseText = text;
-          chrome.runtime.sendMessage({
-            type: 'RESPONSE_CAPTURED',
-            data: { model: 'chatgpt', response: text, capturePath: 'timeout-fallback', sourceUrl: location.href },
-          });
-          return;
-        }
+  // Activity-based timeout: only bites after IDLE_TIMEOUT_MS of no mutations and
+  // no stop button, or the hard 15-min ceiling. Streaming/thinking keeps it alive.
+  timeoutChecker = setInterval(() => {
+    if (!isWaitingForResponse || captured) { clearInterval(timeoutChecker); return; }
+    const now = Date.now();
+    if (find('stopButton').el) lastActivityTs = now; // still generating
+    if (now - startTs <= HARD_CEILING_MS && now - lastActivityTs <= IDLE_TIMEOUT_MS) return;
+
+    clearInterval(checkInterval);
+    clearTimeout(stabilityTimer);
+    clearInterval(timeoutChecker);
+    if (observer) observer.disconnect();
+    isWaitingForResponse = false;
+    const responses = findAll('response');
+    if (responses.length > 0) {
+      const text = getLastAssistantTurnText() ||
+                   responses[responses.length - 1].innerText || '';
+      if (text.length > 10 && text !== lastResponseText) {
+        lastResponseText = text;
+        chrome.runtime.sendMessage({
+          type: 'RESPONSE_CAPTURED',
+          data: { model: 'chatgpt', response: text, capturePath: 'timeout-fallback', sourceUrl: location.href },
+        });
+        return;
       }
-      reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
     }
-  }, 300000);
+    reportBroken('response', {
+      context: (now - startTs > HARD_CEILING_MS) ? 'hard ceiling: 15 min elapsed' : 'idle: no activity for 3 min',
+    });
+  }, 2000);
 }
 
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', model: 'chatgpt' });

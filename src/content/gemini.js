@@ -296,16 +296,49 @@ function injectPrompt(prompt) {
   }, 1000);
 }
 
+// Activity-based waiting: wait as long as Gemini shows a sign of life (stop
+// button OR changing text); only give up after IDLE_TIMEOUT_MS of total
+// silence, with a hard 15-minute ceiling as an absolute backstop.
+const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
+const HARD_CEILING_MS = 15 * 60 * 1000;
+
 function watchForResponse() {
   const responseCountAtStart = findAll('response').length;
   let stableText = '';
   let stableCount = 0;
+  const startTs = Date.now();
+  let lastActivityTs = Date.now();
+  let lastTickText = '';
+
+  const timeoutCapture = (reason) => {
+    clearInterval(checkInterval);
+    isWaitingForResponse = false;
+    const responses = findAll('response');
+    if (responses.length > 0) {
+      const text = responses[responses.length - 1].innerText || '';
+      if (text.length > 10 && text !== lastResponseText) {
+        lastResponseText = text;
+        chrome.runtime.sendMessage({ type: 'RESPONSE_CAPTURED', data: { model: 'gemini', response: text } });
+        return;
+      }
+    }
+    reportBroken('response', { context: reason });
+  };
 
   const checkInterval = setInterval(() => {
-    const stopBtn = find('stopButton').el;
-    if (stopBtn) { stableCount = 0; return; }
+    if (!isWaitingForResponse) { clearInterval(checkInterval); return; }
+    const now = Date.now();
 
+    const stopBtn = find('stopButton').el;
     const responses = findAll('response');
+    const curText = responses.length ? (responses[responses.length - 1].innerText || responses[responses.length - 1].textContent || '') : '';
+    if (stopBtn || curText !== lastTickText) lastActivityTs = now;
+    lastTickText = curText;
+
+    if (now - startTs > HARD_CEILING_MS) return timeoutCapture('hard ceiling: 15 min elapsed');
+    if (now - lastActivityTs > IDLE_TIMEOUT_MS) return timeoutCapture('idle: no activity for 3 min');
+
+    if (stopBtn) { stableCount = 0; return; }
     if (responses.length === 0) return;
 
     const lastResponse = responses[responses.length - 1];
@@ -314,44 +347,17 @@ function watchForResponse() {
     const isChanged = text && text !== lastResponseText && text.length > 10;
 
     if ((isNew || isChanged) && text && text.length > 10) {
-      if (text === stableText) {
-        stableCount++;
-      } else {
-        stableText = text;
-        stableCount = 1;
-      }
+      if (text === stableText) stableCount++;
+      else { stableText = text; stableCount = 1; }
 
       if (stableCount >= 5) {
         clearInterval(checkInterval);
         lastResponseText = text;
         isWaitingForResponse = false;
-        chrome.runtime.sendMessage({
-          type: 'RESPONSE_CAPTURED',
-          data: { model: 'gemini', response: text },
-        });
+        chrome.runtime.sendMessage({ type: 'RESPONSE_CAPTURED', data: { model: 'gemini', response: text } });
       }
     }
   }, 1000);
-
-  setTimeout(() => {
-    if (isWaitingForResponse) {
-      clearInterval(checkInterval);
-      isWaitingForResponse = false;
-      const responses = findAll('response');
-      if (responses.length > 0) {
-        const text = responses[responses.length - 1].innerText || '';
-        if (text.length > 10 && text !== lastResponseText) {
-          lastResponseText = text;
-          chrome.runtime.sendMessage({
-            type: 'RESPONSE_CAPTURED',
-            data: { model: 'gemini', response: text },
-          });
-          return;
-        }
-      }
-      reportBroken('response', { context: 'timeout waiting for response after 5 minutes' });
-    }
-  }, 300000);
 }
 
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', model: 'gemini' });
