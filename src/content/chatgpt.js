@@ -712,12 +712,11 @@ function watchForResponse() {
 
   const STABILITY_MS = 3000;
 
-  // Activity-based waiting: wait as long as ChatGPT shows a sign of life (a
-  // mutation fired, or the stop button is present); only give up after
-  // IDLE_TIMEOUT_MS of total silence, with a hard 15-minute ceiling.
-  const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
-  const HARD_CEILING_MS = 15 * 60 * 1000;
-  const startTs = Date.now();
+  // Activity-based waiting: wait INDEFINITELY while ChatGPT shows a sign of life
+  // (a mutation fired, or the stop button is present) — no cap while it's working.
+  // Only after it goes COMPLETELY silent do we start giving up: 3 min to confirm
+  // idle + 15 min grace = ~18 min of total silence before we bail.
+  const IDLE_TIMEOUT_MS = (3 + 15) * 60 * 1000;
   let lastActivityTs = Date.now();
   let timeoutChecker = null;
 
@@ -852,7 +851,8 @@ function watchForResponse() {
     if (!isWaitingForResponse || captured) { clearInterval(timeoutChecker); return; }
     const now = Date.now();
     if (find('stopButton').el) lastActivityTs = now; // still generating
-    if (now - startTs <= HARD_CEILING_MS && now - lastActivityTs <= IDLE_TIMEOUT_MS) return;
+    // Only bites after ~18 min of TOTAL silence; while it's active this never fires.
+    if (now - lastActivityTs <= IDLE_TIMEOUT_MS) return;
 
     clearInterval(checkInterval);
     clearTimeout(stabilityTimer);
@@ -872,9 +872,7 @@ function watchForResponse() {
         return;
       }
     }
-    reportBroken('response', {
-      context: (now - startTs > HARD_CEILING_MS) ? 'hard ceiling: 15 min elapsed' : 'idle: no activity for 3 min',
-    });
+    reportBroken('response', { context: 'idle: no activity for 18 min' });
   }, 2000);
 }
 

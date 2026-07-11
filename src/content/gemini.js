@@ -296,17 +296,16 @@ function injectPrompt(prompt) {
   }, 1000);
 }
 
-// Activity-based waiting: wait as long as Gemini shows a sign of life (stop
-// button OR changing text); only give up after IDLE_TIMEOUT_MS of total
-// silence, with a hard 15-minute ceiling as an absolute backstop.
-const IDLE_TIMEOUT_MS = 3 * 60 * 1000;
-const HARD_CEILING_MS = 15 * 60 * 1000;
+// Activity-based waiting: wait INDEFINITELY while Gemini shows a sign of life
+// (stop button OR changing text) — no cap while it's working. Only after it goes
+// COMPLETELY silent do we start giving up: 3 min to confirm idle + 15 min grace
+// = ~18 min of total silence before we bail.
+const IDLE_TIMEOUT_MS = (3 + 15) * 60 * 1000;
 
 function watchForResponse() {
   const responseCountAtStart = findAll('response').length;
   let stableText = '';
   let stableCount = 0;
-  const startTs = Date.now();
   let lastActivityTs = Date.now();
   let lastTickText = '';
 
@@ -335,8 +334,8 @@ function watchForResponse() {
     if (stopBtn || curText !== lastTickText) lastActivityTs = now;
     lastTickText = curText;
 
-    if (now - startTs > HARD_CEILING_MS) return timeoutCapture('hard ceiling: 15 min elapsed');
-    if (now - lastActivityTs > IDLE_TIMEOUT_MS) return timeoutCapture('idle: no activity for 3 min');
+    // Only bites after ~18 min of TOTAL silence; while it's active this never fires.
+    if (now - lastActivityTs > IDLE_TIMEOUT_MS) return timeoutCapture('idle: no activity for 18 min');
 
     if (stopBtn) { stableCount = 0; return; }
     if (responses.length === 0) return;

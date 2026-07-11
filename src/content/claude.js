@@ -291,18 +291,17 @@ function injectPrompt(prompt) {
   watchForResponse();
 }
 
-// Activity-based waiting: keep waiting as long as the model shows a sign of
-// life (stop/generating button present OR the response text is still changing).
-// Only give up after a stretch of TOTAL silence (IDLE_TIMEOUT_MS), with a hard
-// 15-minute ceiling as an absolute backstop. No fixed countdown while it works.
-const IDLE_TIMEOUT_MS = 3 * 60 * 1000;   // give up only after 3 min with no activity
-const HARD_CEILING_MS = 15 * 60 * 1000;  // absolute backstop
+// Activity-based waiting: wait INDEFINITELY as long as the model shows any sign
+// of life (stop/generating button present OR the response text still changing) —
+// no cap at all while it's working. Only after it has gone COMPLETELY silent do
+// we start giving up: 3 min of zero movement to confirm it's genuinely idle,
+// then 15 more minutes of grace = ~18 min of total silence before we bail.
+const IDLE_TIMEOUT_MS = (3 + 15) * 60 * 1000;
 
 function watchForResponse() {
   const responseCountAtStart = findAll('response').length;
   let stableText = '';
   let stableCount = 0;
-  const startTs = Date.now();
   let lastActivityTs = Date.now();
   let lastTickText = '';
 
@@ -333,9 +332,8 @@ function watchForResponse() {
     if (stopBtn || curText !== lastTickText) lastActivityTs = now;
     lastTickText = curText;
 
-    // Timers only bite when there's NO sign of life — or at the hard ceiling.
-    if (now - startTs > HARD_CEILING_MS) return timeoutCapture('hard ceiling: 15 min elapsed');
-    if (now - lastActivityTs > IDLE_TIMEOUT_MS) return timeoutCapture('idle: no activity for 3 min');
+    // Only bites after ~18 min of TOTAL silence; while it's active this never fires.
+    if (now - lastActivityTs > IDLE_TIMEOUT_MS) return timeoutCapture('idle: no activity for 18 min');
 
     if (stopBtn) { stableCount = 0; return; }
 
