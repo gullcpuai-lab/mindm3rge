@@ -17,6 +17,41 @@ function mirrorToWeb(session) {
   } catch (e) { /* web mirror offline — ignore */ }
 }
 
+// Remote job status push — when a session was started by a phone-submitted job
+// (session.remoteJobId), report every status change back to the job API so the
+// phone UI tracks progress live. Fire-and-forget like mirrorToWeb: reads
+// remoteConfig async, never awaited by callers, never blocks or throws.
+function mapRemoteStatus(s) {
+  if (s === 'complete') return 'done';
+  if (s === 'awaiting_confirmation') return 'paused_waiting_review';
+  if (s === 'cancelled') return 'cancelled';
+  return 'running';
+}
+
+function pushRemoteStatus(session) {
+  try {
+    if (!session || !session.remoteJobId) return;
+    chrome.storage.local.get('remoteConfig').then((result) => {
+      const cfg = result.remoteConfig || {};
+      if (!cfg.token) return;
+      const base = (cfg.base || 'http://localhost:4011').replace(/\/+$/, '');
+      fetch(`${base}/api/job/${session.remoteJobId}/status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${cfg.token}`,
+        },
+        body: JSON.stringify({
+          status: mapRemoteStatus(session.status),
+          session_id: session.id,
+          ext_version: cfg.extVersion || chrome.runtime.getManifest().version,
+        }),
+        keepalive: true,
+      }).catch(() => {});
+    }).catch(() => {});
+  } catch (e) { /* remote push must never block a save */ }
+}
+
 export async function getSession() {
   const result = await chrome.storage.local.get('currentSession');
   return result.currentSession || null;
@@ -25,6 +60,7 @@ export async function getSession() {
 export async function saveSession(session) {
   await chrome.storage.local.set({ currentSession: session });
   mirrorToWeb(session);
+  pushRemoteStatus(session);
 }
 
 export async function clearSession() {
@@ -54,6 +90,7 @@ export async function getSettings() {
     starterModel: 'claude',
     autoAdvance: true,
     showNotifications: true,
+    evidenceMode: false,
   };
 }
 

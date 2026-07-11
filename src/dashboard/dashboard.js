@@ -278,6 +278,7 @@ document.getElementById('start-btn').addEventListener('click', async () => {
         fileContent: buildFileContext(),
         files: uploadedFiles.map(f => ({ name: f.name, base64: f.base64, mimeType: f.mimeType })),
         directives: getSelectedDirectives(),
+        evidenceMode: !!document.getElementById('evidence-mode-toggle')?.checked,
         hideTabs: true,
       },
     });
@@ -390,6 +391,20 @@ function hideConfirmModal() {
   el.addEventListener('change', async () => {
     const cur = (await chrome.storage.local.get('settings')).settings || {};
     cur.manualMode = el.checked;
+    await chrome.storage.local.set({ settings: cur });
+  });
+})();
+
+// Evidence Mode toggle — when on, Claude Code (the Evidence Bridge on :4012)
+// injects verified, cited case-record evidence into the panel each pass.
+(async function initEvidenceModeToggle() {
+  const el = document.getElementById('evidence-mode-toggle');
+  if (!el) return;
+  const { settings } = await chrome.storage.local.get('settings');
+  el.checked = !!(settings && settings.evidenceMode);
+  el.addEventListener('change', async () => {
+    const cur = (await chrome.storage.local.get('settings')).settings || {};
+    cur.evidenceMode = el.checked;
     await chrome.storage.local.set({ settings: cur });
   });
 })();

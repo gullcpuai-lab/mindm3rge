@@ -1,6 +1,17 @@
 // Critique prompt templates for multi-model validation
 
-export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives, priorTurns) {
+// Evidence Mode: render the accumulated, verified case-record evidence as a
+// distinct ground-truth block. Each entry was produced by the Evidence Bridge
+// and has already passed verbatim-quote + context-integrity + adversarial
+// verification, so models should treat it as fact (not opinion to debate).
+function buildEvidenceBlock(evidenceLog) {
+  if (!evidenceLog || evidenceLog.length === 0) return '';
+  const body = evidenceLog.map((e, i) => (typeof e === 'string' ? e : (e.markdown || ''))).join('\n\n');
+  if (!body.trim()) return '';
+  return `\n\n=== VERIFIED EVIDENCE FROM THE CASE RECORD (ground truth — every quote was machine-verified verbatim against the source file; treat as established fact, not opinion) ===\n${body}\n=== END VERIFIED EVIDENCE ===\n`;
+}
+
+export function buildCritiquePrompt(originalPrompt, previousModelName, previousResponse, roundNumber, totalRounds, directives, priorTurns, evidenceLog) {
   const directiveBlock = directives && directives.length > 0
     ? `\n\nFOCUS YOUR CRITIQUE ON THESE SPECIFIC AREAS:\n${directives.map((d, i) => `${i + 1}. ${d}`).join('\n')}\n`
     : '';
@@ -28,7 +39,7 @@ IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with down
 
 ORIGINAL USER PROMPT:
 ${originalPrompt}
-${discussionBlock}${goalBlock}${directiveBlock}
+${discussionBlock}${goalBlock}${directiveBlock}${buildEvidenceBlock(evidenceLog)}
 Review the discussion above. Consider what has been said by all prior participants, then provide your analysis:
 
 1. **AGREE**: What points from the discussion are correct and well-reasoned?
@@ -40,7 +51,7 @@ Review the discussion above. Consider what has been said by all prior participan
 Be rigorous, specific, and constructive. Do not be deferential — if a previous response is wrong, say so clearly and explain why.`;
 }
 
-export function buildRevisionPrompt(originalPrompt, modelName, originalResponse, critiques, priorTurns) {
+export function buildRevisionPrompt(originalPrompt, modelName, originalResponse, critiques, priorTurns, evidenceLog) {
   // Full discussion chain across ALL prior passes, so the starter model sees
   // the entire cross-model history when revising (not just the current pass's
   // critiques). Without this, pass 3+ "resets" because each LLM is on a
@@ -66,7 +77,7 @@ IMPORTANT: Do NOT create downloadable files, artifacts, or code blocks with down
 ORIGINAL PROMPT:
 ${originalPrompt}
 
-${discussionBlock}
+${discussionBlock}${buildEvidenceBlock(evidenceLog)}
 
 Please revise your response based on the FULL discussion above (across all prior passes). You may:
 - Accept valid criticisms and incorporate them
@@ -76,10 +87,10 @@ Please revise your response based on the FULL discussion above (across all prior
 Provide your revised, improved answer that takes into account everything every model has said across all prior passes — not just the most recent pass.`;
 }
 
-export function buildSynthesisPrompt(originalPrompt, allTurns) {
+export function buildSynthesisPrompt(originalPrompt, allTurns, evidenceLog) {
   const discussion = allTurns.map((t, i) =>
     `--- ${t.modelName} (${t.role}, Round ${t.round}) ---\n${t.content}`
-  ).join('\n\n');
+  ).join('\n\n') + buildEvidenceBlock(evidenceLog);
 
   return `You are synthesizing a multi-model discussion into a final answer.
 

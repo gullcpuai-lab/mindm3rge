@@ -2,6 +2,7 @@
 
 import { buildCritiquePrompt, buildRevisionPrompt, buildSynthesisPrompt } from '../utils/prompts.js';
 import { getSession, saveSession, saveToHistory, getSettings } from '../utils/storage.js';
+import { initRemote } from './remote.js';
 
 const DEBUG = false;
 
@@ -140,8 +141,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+// Remote-trigger poller (v0.7.0): claims phone-submitted jobs from the :4011
+// job API and starts them through the same handleStartSession path as the
+// dashboard. Called at module top level so its alarm/onStartup listeners
+// register synchronously on every SW wake (MV3 requirement).
+initRemote({ handleStartSession, getSession });
+
 async function handleStartSession(data) {
-  const { prompt, starterModel, passes, models, goal, fileContent, files, directives } = data;
+  const { prompt, starterModel, passes, models, goal, fileContent, files, directives, evidenceMode } = data;
 
   // Reset fresh chat tracking for new session
   freshChatOpened.clear();
@@ -175,8 +182,12 @@ async function handleStartSession(data) {
     filesUploaded: {},
     goal: goal || '',
     directives: directives || [],
+    evidenceMode: !!evidenceMode,   // Evidence Mode toggle (Claude Code grounding)
+    evidenceLog: [],                // verified case-record evidence injected per pass
+    lastEvidenceForTurn: 0,
     status: 'running',
     createdAt: new Date().toISOString(),
+    remoteJobId: data.remoteJobId || null,   // set when started by a remote (phone) job
   };
 
   // Track the prompt actually sent so the dashboard can show it later.
@@ -316,6 +327,26 @@ async function handleResponseCaptured(data, tab, opts = {}) {
 // Advance the rotation from the current session state (turns already recorded).
 // Shared by handleResponseCaptured and the post-confirmation resume handlers.
 async function advanceSession(session) {
+  // Remote cancel (turn boundary): the poller sets 'remoteCancel' when the
+  // backend reports the job cancelled. Honor it here — after a turn is
+  // recorded, before anything is sent to the next model.
+  if (session.remoteJobId) {
+    const { remoteCancel } = await chrome.storage.local.get('remoteCancel');
+    if (remoteCancel && remoteCancel === session.remoteJobId) {
+      session.status = 'cancelled';
+      logDiag(session, 'remote_cancelled', { jobId: session.remoteJobId });
+      await saveSession(session);   // pushRemoteStatus reports 'cancelled' to the backend
+      await chrome.storage.local.remove('remoteCancel');
+      return { ok: true, cancelled: true };
+    }
+  }
+
+  // Evidence Mode: before building the next model's prompt, let Claude Code
+  // (the Evidence Bridge) review the discussion so far and inject verified,
+  // cited case-record evidence. Reacts to the latest captured turn; safe to
+  // call on resume because it no-ops if this turn was already processed.
+  await maybeInjectEvidence(session);
+
   const nextAction = getNextAction(session);
 
   if (nextAction.done) {
@@ -352,6 +383,44 @@ async function advanceSession(session) {
   await sendToModel(nextAction.model, nextAction.prompt, session.files);
 
   return { ok: true, nextModel: nextAction.model, nextStep: nextAction.step };
+}
+
+// ── Evidence Mode ────────────────────────────────────────────────────────
+const EVIDENCE_BRIDGE_URL = 'http://localhost:4012/api/evidence';
+
+async function maybeInjectEvidence(session) {
+  if (!session || !session.evidenceMode) return;
+  const turns = session.turns || [];
+  if (turns.length === 0) return;
+  // Only react once per captured turn (idempotent on resume).
+  if ((session.lastEvidenceForTurn || 0) >= turns.length) return;
+  session.lastEvidenceForTurn = turns.length;
+
+  const transcript = turns.map(t => ({ model: t.modelName || t.model, role: t.role, text: t.content }));
+  try {
+    const resp = await fetch(EVIDENCE_BRIDGE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: session.id, round: session.currentPass, transcript }),
+    });
+    const data = await resp.json();
+    if (data && data.inject && data.evidence_markdown) {
+      session.evidenceLog = session.evidenceLog || [];
+      session.evidenceLog.push({
+        round: session.currentPass,
+        afterTurn: turns.length,
+        markdown: data.evidence_markdown,
+        citations: data.citations || [],
+      });
+      logDiag(session, 'evidence_injected', { round: session.currentPass, citations: (data.citations || []).length });
+      await saveSession(session);  // visible in dashboard + :4011 viewer
+    } else {
+      logDiag(session, 'evidence_noop', { note: data && data.note });
+    }
+  } catch (e) {
+    // Bridge down / error → never block the discussion; just skip this pass.
+    logDiag(session, 'evidence_error', { error: String((e && e.message) || e) });
+  }
 }
 
 // v0.6.0 — user confirmed the (short) ChatGPT capture is correct; resume.
@@ -401,7 +470,8 @@ function getNextAction(session) {
       currentPass,
       passes,
       session.directives,
-      turns  // all turns so far
+      turns,  // all turns so far
+      session.evidenceLog  // verified case-record evidence (Evidence Mode)
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
@@ -430,12 +500,12 @@ function getNextAction(session) {
       // cross-model history across all prior passes (fixes pass-3+ context reset)
       const critiques = critiquesThisPass.map(t => ({ modelName: t.modelName, content: t.content }));
       const originalResponse = turns.find(t => t.round === currentPass && (t.role === 'initial' || t.role === 'revision'))?.content || '';
-      const prompt = buildRevisionPrompt(session.prompt, MODEL_NAMES[starterModel], originalResponse, critiques, turns);
+      const prompt = buildRevisionPrompt(session.prompt, MODEL_NAMES[starterModel], originalResponse, critiques, turns, session.evidenceLog);
       return { done: false, model: starterModel, step: 'revision', pass: currentPass + 1, prompt };
     }
 
     // Final pass done — synthesize
-    const prompt = buildSynthesisPrompt(session.prompt, turns);
+    const prompt = buildSynthesisPrompt(session.prompt, turns, session.evidenceLog);
     // Use the model that hasn't gone last as synthesizer
     const lastModel = turns[turns.length - 1].model;
     const synthesizer = modelOrder.find(m => m !== lastModel) || modelOrder[0];
@@ -451,7 +521,8 @@ function getNextAction(session) {
       currentPass,
       passes,
       session.directives,
-      turns  // all turns so far
+      turns,  // all turns so far
+      session.evidenceLog  // verified case-record evidence (Evidence Mode)
     );
     return { done: false, model: otherModels[0], step: 'critique', pass: currentPass, prompt };
   }
