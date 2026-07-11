@@ -139,7 +139,74 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     handleEditTurn(message.turnIndex, message.content).then(sendResponse);
     return true;
   }
+
+  if (message.type === 'CLAUDE_MAIN_INSERT') {
+    // Claude's ProseMirror ignores execCommand from the isolated content-script
+    // world (DOM changes but the editor model doesn't → send button never
+    // renders). The content script does the upload, then asks us to run the
+    // text insert + send-click in the page's MAIN world.
+    injectClaudeMainWorld(sender.tab?.id, message.prompt).then(sendResponse);
+    return true;
+  }
 });
+
+// Insert `prompt` into claude.ai's ProseMirror composer and click send, in the
+// page's MAIN world via chrome.scripting.executeScript. The func is serialized
+// into the page — it must be fully self-contained (args + page globals only).
+async function injectClaudeMainWorld(tabId, prompt) {
+  if (typeof tabId !== 'number') {
+    return { ok: false, error: 'no tab id for CLAUDE_MAIN_INSERT' };
+  }
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'MAIN',
+      func: async (text) => {
+        const composer =
+          document.querySelector('div.ProseMirror') ||
+          document.querySelector('div[contenteditable="true"]');
+        if (!composer) return { ok: false, error: 'no composer' };
+
+        composer.focus();
+        document.execCommand('selectAll', false, null);
+        document.execCommand('delete', false, null);
+
+        const lines = text.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i]) document.execCommand('insertText', false, lines[i]);
+          if (i < lines.length - 1) {
+            const breakOpts = { key: 'Enter', code: 'Enter', shiftKey: true, bubbles: true, cancelable: true };
+            const keydown = new KeyboardEvent('keydown', breakOpts);
+            composer.dispatchEvent(keydown);
+            composer.dispatchEvent(new KeyboardEvent('keyup', breakOpts));
+            if (!keydown.defaultPrevented) document.execCommand('insertLineBreak', false, null);
+          }
+        }
+
+        // Send button only renders once ProseMirror's model has content (and
+        // file uploads may keep it disabled for a while).
+        const deadline = Date.now() + 30000;
+        while (Date.now() < deadline) {
+          const btn = document.querySelector('button[aria-label="Send message"]');
+          if (btn && !btn.disabled) {
+            btn.click();
+            return { ok: true, sent: true };
+          }
+          await new Promise((r) => setTimeout(r, 300));
+        }
+
+        const enterOpts = { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true };
+        composer.dispatchEvent(new KeyboardEvent('keydown', enterOpts));
+        composer.dispatchEvent(new KeyboardEvent('keyup', enterOpts));
+        return { ok: true, sent: false, note: 'enter-fallback' };
+      },
+      args: [prompt],
+    });
+    return results?.[0]?.result ?? { ok: false, error: 'executeScript returned no result' };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
 
 // Remote-trigger poller (v0.7.0): claims phone-submitted jobs from the :4011
 // job API and starts them through the same handleStartSession path as the

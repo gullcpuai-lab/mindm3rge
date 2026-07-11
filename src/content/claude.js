@@ -24,7 +24,7 @@ const SELECTORS = {
     'button[aria-label*="Stop"]', 'button:has(svg.animate-spin)',
   ],
   fileInput: ['input[type="file"]'],
-  uploadButton: ['button[aria-label="Add content"]', 'button[aria-label="Attach files"]'],
+  uploadButton: ['button[aria-label="Add files, connectors, and more"]', 'button[aria-label*="Add files" i]', 'button[aria-label*="attach" i]', 'button[aria-label*="upload" i]', 'button[aria-label="Add content"]'],
 };
 
 function find(type) {
@@ -124,71 +124,127 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // files finished uploading, dropping some of a multi-file batch. Robust across
 // DOM churn: counts BOTH known chip elements AND visible occurrences of the
 // uploaded filenames. Returns the highest count observed.
-async function waitForUploads(expected, fileNames, chipSelectors, timeoutMs) {
-  timeoutMs = timeoutMs || 45000;
-  const prefixes = (fileNames || [])
-    .map(n => { const b = (n.split('.')[0] || n); return b.length >= 4 ? b.slice(0, 14) : null; })
-    .filter(Boolean);
-  const start = Date.now();
-  let best = 0;
-  while (Date.now() - start < timeoutMs) {
-    let chips = 0;
-    for (const sel of (chipSelectors || [])) {
-      try { chips = Math.max(chips, document.querySelectorAll(sel).length); } catch (e) {}
-    }
-    let names = 0;
-    if (prefixes.length) {
-      const t = document.body ? (document.body.innerText || '') : '';
-      names = prefixes.filter(p => t.includes(p)).length;
-    }
-    best = Math.max(best, chips, names);
-    if (best >= expected) return best;
-    await new Promise(r => setTimeout(r, 400));
+// Prevents a duplicated uploadFilesThenPrompt / INJECT_PROMPT delivery from
+// attaching the same files twice. Reset in the finally block once the prompt
+// has been injected, so the next legitimate session works normally.
+let uploadInFlight = false;
+
+// Attachment-card selectors, most specific first. Use the FIRST selector that
+// matches anything — never a union or Math.max across selectors, and never the
+// broad [data-testid*="file"] wildcard (it over-counts and caused false 2s).
+const FILE_CARD_SELECTORS = [
+  '[data-testid="file-upload"]',
+  '[data-testid="file-thumbnail"]',
+];
+
+function getFileCards() {
+  for (const sel of FILE_CARD_SELECTORS) {
+    let els = [];
+    try { els = Array.from(document.querySelectorAll(sel)); } catch (e) {}
+    if (!els.length) continue;
+    return els.filter(el => !els.some(other => other !== el && other.contains(el)));
   }
-  return best;
+  return [];
+}
+
+function cardIsBusy(card) {
+  try {
+    if (card.getAttribute('aria-busy') === 'true') return true;
+    return !!card.querySelector(
+      '[role="progressbar"], [class*="progress"], svg.animate-spin, [aria-busy="true"]'
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+// Gate: resolves true ONLY when exactly `expected` attachment cards are
+// rendered, none busy, and stable for ~1s. A settled over-count (double-attach)
+// fails fast; under-count keeps polling until timeout.
+async function waitForUploads(expected, fileNames, timeoutMs) {
+  timeoutMs = timeoutMs || 45000;
+  const POLL_MS = 250;
+  const STABLE_POLLS = 4; // ~1s of stability
+  const start = Date.now();
+  let stable = 0;
+  let lastCount = -1;
+  let lastBusy = true;
+
+  while (Date.now() - start < timeoutMs) {
+    const cards = getFileCards();
+    const count = cards.length;
+    const busy = cards.some(cardIsBusy);
+
+    if (count >= expected && !busy && count === lastCount) stable++;
+    else stable = 0;
+    lastCount = count;
+    lastBusy = busy;
+
+    if (stable >= STABLE_POLLS) {
+      if (count === expected) return true;
+      reportBroken('fileInput', {
+        context: 'DOUBLE-ATTACH: more file cards than files uploaded',
+        got: count, expected, fileNames,
+      });
+      return false;
+    }
+    await new Promise(r => setTimeout(r, POLL_MS));
+  }
+
+  reportBroken('fileInput', {
+    context: 'upload gate timeout (incomplete or unstable attach)',
+    got: lastCount, expected, stillUploading: lastBusy, fileNames,
+  });
+  return false;
 }
 
 async function uploadFilesThenPrompt(files, prompt) {
-  let fileInput = find('fileInput').el;
-
-  if (!fileInput) {
-    const uploadBtn = find('uploadButton').el;
-    if (uploadBtn) {
-      uploadBtn.click();
-      await new Promise(r => setTimeout(r, 500));
-      fileInput = find('fileInput').el;
-    }
+  if (uploadInFlight) {
+    DEBUG && console.log('[MindM3rge] uploadFilesThenPrompt suppressed: already in flight');
+    reportBroken('fileInput', { context: 'duplicate uploadFilesThenPrompt call suppressed' });
+    return;
   }
+  uploadInFlight = true;
+  try {
+    let fileInput = find('fileInput').el;
+    if (!fileInput) {
+      const uploadBtn = find('uploadButton').el;
+      if (uploadBtn) {
+        uploadBtn.click();
+        await new Promise(r => setTimeout(r, 500));
+        fileInput = find('fileInput').el;
+      }
+    }
+    if (fileInput) {
+      // Stale cards from a previous run count toward the expected total.
+      const baseline = getFileCards().length;
+      if (baseline > 0) DEBUG && console.log('[MindM3rge] pre-existing file cards:', baseline);
 
-  if (fileInput) {
-    const dt = new DataTransfer();
-    for (const f of files) {
-      const binary = atob(f.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const blob = new Blob([bytes], { type: f.mimeType || 'application/octet-stream' });
-      const file = new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' });
-      dt.items.add(file);
+      const dt = new DataTransfer();
+      for (const f of files) {
+        const binary = atob(f.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: f.mimeType || 'application/octet-stream' });
+        const file = new File([blob], f.name, { type: f.mimeType || 'application/octet-stream' });
+        dt.items.add(file);
+      }
+      fileInput.files = dt.files;
+      // File inputs canonically fire only 'change'. Dispatching 'input' too made
+      // Claude's handler process the files twice (the double-attach bug).
+      fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+
+      const clean = await waitForUploads(baseline + files.length, files.map(f => f.name));
+      DEBUG && console.log('[MindM3rge] Claude upload gate:', clean ? 'clean' : 'FAILED',
+        '(expected', files.length, 'file(s), baseline', baseline + ')');
+    } else {
+      DEBUG && console.log('[MindM3rge] No file input found on Claude');
+      reportBroken('fileInput', { context: 'upload attempt' });
     }
-    fileInput.files = dt.files;
-    fileInput.dispatchEvent(new Event('input', { bubbles: true }));
-    fileInput.dispatchEvent(new Event('change', { bubbles: true }));
-    // Gate the prompt+send on ALL files finishing — do not send a partial batch.
-    // Claude renders each attachment as a [data-testid="file-upload"] card
-    // (verified live) and does NOT put the filename in page text, so gate on the
-    // chip element, not the filename.
-    const got = await waitForUploads(files.length, files.map(f => f.name),
-      ['[data-testid="file-upload"]', '[data-testid="file-thumbnail"]', '[data-testid*="file"]']);
-    DEBUG && console.log('[MindM3rge] Claude uploads rendered', got, 'of', files.length);
-    if (got < files.length) {
-      reportBroken('fileInput', { context: 'upload incomplete (race)', got, expected: files.length });
-    }
-  } else {
-    DEBUG && console.log('[MindM3rge] No file input found on Claude');
-    reportBroken('fileInput', { context: 'upload attempt' });
+    injectPrompt(prompt);
+  } finally {
+    uploadInFlight = false;
   }
-
-  injectPrompt(prompt);
 }
 
 function injectPrompt(prompt) {
@@ -206,30 +262,33 @@ function injectPrompt(prompt) {
     DEBUG && console.log('[MindM3rge] Claude input found via auto-discovery');
   }
 
-  input.focus();
-  input.textContent = prompt;
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-
-  // Wait for send button to become enabled (file uploads may delay it)
-  let sendAttempts = 0;
-  const trySend = setInterval(() => {
-    sendAttempts++;
-    const sendResult = find('sendButton');
-    const sendButton = sendResult.el;
-
-    if (sendButton && !sendButton.disabled) {
-      clearInterval(trySend);
-      sendButton.click();
-      isWaitingForResponse = true;
-      watchForResponse();
-    } else if (sendAttempts >= 30) {
-      clearInterval(trySend);
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      isWaitingForResponse = true;
-      watchForResponse();
-      if (!sendButton) reportBroken('sendButton', { context: 'after typing prompt, send button not found after 30s' });
+  // ProseMirror ignores execCommand from this isolated world — text lands in the
+  // DOM but the editor model stays empty, so the send button never renders. The
+  // insert + send-click run in the page's MAIN world via the background
+  // (chrome.scripting.executeScript, world:'MAIN'). We only verify the composer
+  // exists here, then hand off.
+  chrome.runtime.sendMessage({ type: 'CLAUDE_MAIN_INSERT', prompt }, (res) => {
+    if (chrome.runtime.lastError) {
+      reportBroken('input', {
+        context: 'CLAUDE_MAIN_INSERT sendMessage failed',
+        error: chrome.runtime.lastError.message,
+      });
+      return;
     }
-  }, 500);
+    DEBUG && console.log('[MindM3rge] Claude main-world insert result:', res);
+    if (!res || !res.ok) {
+      reportBroken('input', { context: 'main-world insert failed', result: res });
+    } else if (res.sent === false) {
+      reportBroken('sendButton', {
+        context: 'main-world: send button never enabled within 30s, used Enter fallback',
+        result: res,
+      });
+    }
+  });
+
+  // Watch from this (isolated) world regardless of main-world send timing.
+  isWaitingForResponse = true;
+  watchForResponse();
 }
 
 function watchForResponse() {

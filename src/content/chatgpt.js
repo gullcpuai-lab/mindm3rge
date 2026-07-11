@@ -224,6 +224,12 @@ const SELECTORS = {
 // capture logic can both (a) gate on real-prose-length to avoid
 // premature capture, and (b) annotate the final captured text with
 // the references in a way that doesn't dominate it.
+// Matches ChatGPT file-chip labels: "report.pdf", "canary_val", "data (2)", etc.
+const isFilenameish = (t) =>
+  /^[A-Za-z0-9_().\-\s]{1,80}\.[A-Za-z]{2,5}$/.test(t) ||
+  /^[A-Za-z0-9_\-]+(\s*\(\d+\))?\s*$/.test(t) ||
+  /^[A-Za-z0-9_]+(?:[ _-][A-Za-z0-9_]+){0,4}\s*\(\d+\)\s*$/.test(t);
+
 function extractProse(el) {
   if (!el) return { prose: '', pillTexts: [] };
   const clone = el.cloneNode(true);
@@ -250,6 +256,30 @@ function extractProse(el) {
     p.remove();
   });
 
+  // Strip ChatGPT uploaded-file reference cards: `not-prose` chips whose text is a
+  // filename (e.g. <p class="not-prose … truncate">canary_val</p>). ChatGPT also uses
+  // `not-prose` for legit wrappers (tables/code/KaTeX), so never touch a node holding
+  // <table>/<pre>/<code> or substantial text — only short, filename-ish chip labels.
+  clone.querySelectorAll('.not-prose').forEach((node) => {
+    if (!clone.contains(node)) return; // already removed with an outer card
+    if (node.querySelector('table, pre, code') || ['TABLE', 'PRE', 'CODE'].includes(node.tagName)) return;
+    const t = (node.innerText || node.textContent || '').trim();
+    if (!t || t.length > 120) return; // substantial prose — keep
+    const isChip =
+      (node.tagName === 'P' && node.classList.contains('truncate')) ||
+      isFilenameish(t);
+    if (!isChip) return;
+    pillTexts.push(t);
+    let parent = node.parentElement;
+    node.remove();
+    // Peel off the enclosing card wrapper(s) if the chip was their only text content.
+    while (parent && parent !== clone && !(parent.textContent || '').trim()) {
+      const next = parent.parentElement;
+      parent.remove();
+      parent = next;
+    }
+  });
+
   // Also strip <button> elements that look like file-reference chips:
   // - no aria-label (legitimate action buttons like "Copy table" have one)
   // - no data-testid
@@ -261,13 +291,8 @@ function extractProse(el) {
     if (btn.dataset && btn.dataset.testid) return;    // marked button — keep
     const t = (btn.innerText || btn.textContent || '').trim();
     if (!t) return;
-    // Strip if text content looks like a file name / short identifier
-    // (no spaces typical of prose, or contains a recognized extension)
-    const isFilenameish =
-      /^[A-Za-z0-9_().\-\s]{1,80}\.[A-Za-z]{2,5}$/.test(t) ||      // ends in extension
-      /^[A-Za-z0-9_\-]+(\s*\(\d+\))?\s*$/.test(t) ||                // bare ident, maybe (1)
-      /^[A-Za-z0-9_]+(?:[ _-][A-Za-z0-9_]+){0,4}\s*\(\d+\)\s*$/.test(t); // ident (1)
-    if (isFilenameish) {
+    // Strip if text content looks like a file name / short identifier.
+    if (isFilenameish(t)) {
       pillTexts.push(t);
       btn.remove();
     }
@@ -292,6 +317,17 @@ function extractProse(el) {
 // Fix: capture the WHOLE last assistant turn — concatenate every prose block
 // (.markdown answer/preamble + ProseMirror writing-block canvas) inside the
 // last assistant container, pill-stripped, in document order.
+// v0.7.1 — During the brief pre-answer render, the assistant turn can contain
+// ONLY uploaded-file reference chips (a filename repeated per chip) that aren't
+// yet the not-prose structure extractProse strips. A part made entirely of
+// filename-like lines is that transient state, never a real answer — drop it
+// so capture keeps waiting for the real prose to stream in.
+function isAllFilenames(text) {
+  const lines = (text || '').split('\n').map((l) => l.trim()).filter((l) => l.length);
+  if (!lines.length) return false;
+  return lines.every((l) => isFilenameish(l));
+}
+
 function getLastAssistantTurnText() {
   const turns = document.querySelectorAll('[data-message-author-role="assistant"]');
   if (!turns.length) return '';
@@ -300,8 +336,13 @@ function getLastAssistantTurnText() {
   // Drop blocks nested inside an earlier-collected block (avoids double-counting
   // a .markdown that also lives inside a .ProseMirror canvas wrapper).
   blocks = blocks.filter((el, i) => !blocks.some((o, j) => j < i && o.contains(el)));
-  if (!blocks.length) return (turn.innerText || turn.textContent || '').trim();
-  const parts = blocks.map((b) => extractProse(b).prose).filter((p) => p && p.length);
+  // Fallback also goes through extractProse so a pre-prose render (file cards only,
+  // no content blocks yet) yields '' instead of the filenames.
+  if (!blocks.length) {
+    const prose = extractProse(turn).prose;
+    return isAllFilenames(prose) ? '' : prose;
+  }
+  const parts = blocks.map((b) => extractProse(b).prose).filter((p) => p && p.length && !isAllFilenames(p));
   return parts.join('\n\n').trim();
 }
 
