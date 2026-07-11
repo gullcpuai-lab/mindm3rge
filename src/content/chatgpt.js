@@ -735,8 +735,14 @@ function watchForResponse() {
     // v0.6.0 — CHEAP DOM read first (no tab-focus steal): the WHOLE assistant
     // turn (preamble + answer + canvas), pill-stripped. We settle the capture
     // off this so we don't focus-steal the ChatGPT tab on every tick.
-    let capturedText = getLastAssistantTurnText() ||
-                       (lastResponse.innerText || lastResponse.textContent || '');
+    // v0.7.1 — getLastAssistantTurnText() intentionally returns '' during the
+    // early file-chip-only render; the raw innerText fallback must respect the
+    // same guard or it re-captures the filenames the guard just dropped.
+    let capturedText = getLastAssistantTurnText();
+    if (!capturedText) {
+      const raw = (lastResponse.innerText || lastResponse.textContent || '').trim();
+      capturedText = isAllFilenames(raw) ? '' : raw;
+    }
     if (!capturedText || capturedText.length <= 10) return;
 
     // v0.6.0 anti-premature-capture: the length must hold steady across ticks
