@@ -127,12 +127,29 @@ async function pollOnce() {
           status: mapStatus(s.status),
           session_id: s.id,
           ext_version: cfg.extVersion,
+          // Report which model/step is running so the phone can name what's
+          // stuck ("skip ChatGPT" / "move ChatGPT to end").
+          current_model: s.currentModel,
+          current_step: s.currentStep,
         });
         if (resp && resp.cancelled) {
           // Turn-boundary cancel: advanceSession checks this flag before
           // sending to the next model. Never yank a mid-turn capture.
           await chrome.storage.local.set({ remoteCancel: s.remoteJobId });
           console.log(`[MindM3rge remote] cancel requested for job ${s.remoteJobId} — will stop at next turn boundary`);
+        } else if (resp && resp.command) {
+          // One-shot turn command from mobile — UNLIKE cancel, these act NOW to
+          // rescue a stuck mid-turn model (that's the whole point).
+          const cmd = resp.command;
+          console.log(`[MindM3rge remote] turn command from mobile: ${cmd}`);
+          try {
+            if (cmd === 'skip' && deps.handleSkipModel) await deps.handleSkipModel();
+            else if (cmd === 'defer' && deps.handleDeferModel) await deps.handleDeferModel();
+            else if (cmd === 'retry' && deps.handleRetryModel) await deps.handleRetryModel();
+            else console.warn(`[MindM3rge remote] unknown/unwired command: ${cmd}`);
+          } catch (e) {
+            console.error('[MindM3rge remote] command dispatch failed:', e);
+          }
         }
       }
       console.log('[MindM3rge remote] session active — not claiming');

@@ -210,7 +210,7 @@ async function injectClaudeMainWorld(tabId, prompt) {
 // job API and starts them through the same handleStartSession path as the
 // dashboard. Called at module top level so its alarm/onStartup listeners
 // register synchronously on every SW wake (MV3 requirement).
-initRemote({ handleStartSession, getSession });
+initRemote({ handleStartSession, getSession, handleSkipModel, handleDeferModel, handleRetryModel });
 
 async function handleStartSession(data) {
   const { prompt, starterModel, passes, models, goal, fileContent, files, directives, evidenceMode } = data;
@@ -942,6 +942,46 @@ async function handleSkipModel() {
 
   await sendToModel(nextAction.model, nextAction.prompt, session.files);
   return { ok: true, nextModel: nextAction.model };
+}
+
+// Move the current (stuck) model to the END of the rotation and advance to the
+// next model NOW — the deferred model is retried after the others this pass,
+// NOT skipped. No turn is recorded for it, so getNextAction keeps treating it
+// as uncritiqued and picks it up once it's first-in-order again. A late capture
+// from the stuck tab is dropped by the stray-capture guard (model mismatch),
+// and freshChatOpened is cleared so its retry starts in a clean chat.
+async function handleDeferModel() {
+  const session = await getSession();
+  if (!session || session.status !== 'running') return { ok: false };
+
+  const model = session.currentModel;
+  const order = (session.modelOrder || []).slice();
+  const idx = order.indexOf(model);
+  if (idx !== -1) {
+    order.splice(idx, 1);
+    order.push(model);          // stuck model → last in rotation
+    session.modelOrder = order;
+  }
+  freshChatOpened.delete(model);
+
+  // Advance WITHOUT recording a turn for the deferred model.
+  const nextAction = getNextAction(session);
+  if (nextAction.done) {
+    // Nothing else is pending (it was effectively the only one left) — the
+    // "move to end" degenerates to a fresh retry of this same model.
+    logDiag(session, 'deferred_retry', { deferred: model });
+    return await handleRetryModel();
+  }
+
+  session.currentStep = nextAction.step;
+  session.currentModel = nextAction.model;
+  session.currentPass = nextAction.pass;
+  session.lastPromptSent = nextAction.prompt;
+  logDiag(session, 'deferred', { deferred: model, toModel: nextAction.model, order: session.modelOrder });
+  await saveSession(session);
+
+  await sendToModel(nextAction.model, nextAction.prompt, session.files);
+  return { ok: true, deferred: model, nextModel: nextAction.model };
 }
 
 async function handleCancelSession() {
