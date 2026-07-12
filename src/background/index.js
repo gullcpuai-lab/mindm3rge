@@ -171,17 +171,15 @@ async function injectClaudeMainWorld(tabId, prompt) {
         document.execCommand('selectAll', false, null);
         document.execCommand('delete', false, null);
 
-        const lines = text.split('\n');
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i]) document.execCommand('insertText', false, lines[i]);
-          if (i < lines.length - 1) {
-            const breakOpts = { key: 'Enter', code: 'Enter', shiftKey: true, bubbles: true, cancelable: true };
-            const keydown = new KeyboardEvent('keydown', breakOpts);
-            composer.dispatchEvent(keydown);
-            composer.dispatchEvent(new KeyboardEvent('keyup', breakOpts));
-            if (!keydown.defaultPrevented) document.execCommand('insertLineBreak', false, null);
-          }
-        }
+        // Insert the WHOLE prompt in ONE execCommand. The previous approach
+        // inserted line-by-line and dispatched a synthetic Shift+Enter between
+        // lines — but ProseMirror HANDLES that synthetic keydown
+        // (defaultPrevented=true) and, in doing so, WIPES the text inserted just
+        // before it. Result: only the final line survived, so every multi-line
+        // prompt (the anti-artifact preamble makes them all multi-line) lost its
+        // task text. A single insertText preserves the full text, in order, with
+        // newlines rendered as hard breaks.
+        document.execCommand('insertText', false, text);
 
         // Send button only renders once ProseMirror's model has content (and
         // file uploads may keep it disabled for a while).
