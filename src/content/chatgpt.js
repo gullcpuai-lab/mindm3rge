@@ -918,7 +918,11 @@ function watchForResponse() {
     const len = rs.length ? (rs[rs.length - 1].innerText || '').length : 0;
     const now = Date.now();
     if (len !== _frozenLen) { _frozenLen = len; _frozenTs = now; return; }
-    if (streaming && len >= 3 && now - _frozenTs > 30000) {
+    // A 0-char freeze (tab never painted any token) gets a longer grace so we
+    // don't fire during a normal pre-first-token thinking pause; a partial
+    // freeze (>=3 chars already rendered) is unambiguous and fires sooner.
+    const _frozenThreshold = len >= 3 ? 30000 : 45000;
+    if (streaming && now - _frozenTs > _frozenThreshold) {
       _frozenFired = true;
       clearInterval(_frozenIv);
       DEBUG && console.log('[MindM3rge] frozen render (chatgpt) — requesting RELOAD_RECAPTURE');
