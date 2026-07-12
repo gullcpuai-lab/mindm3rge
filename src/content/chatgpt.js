@@ -729,11 +729,25 @@ function watchForResponse() {
   let settleCount = 0;
   const SHORT_GUARD_CHARS = 250;
 
+  // Post-streaming grace cap: web-search answers keep loading citation source
+  // chips for several seconds AFTER generation ends, so the text length never
+  // settles and the settle gate would hang forever. Once the Stop button has
+  // been gone for this long, capture the current text as-is (citations kept).
+  // 8s is plenty for the citation tail to load; raise if chips load slower.
+  const POST_STREAM_MAX_MS = 8000;
+  let streamEndedTs = null;
+
   async function tryCapture() {
     if (captured) return;
 
     const stopBtn = find('stopButton').el;
-    if (stopBtn) { DEBUG && console.log('[MindM3rge] still streaming (stop btn present)'); return; }
+    if (stopBtn) {
+      // still generating (or resumed after a thinking pause) — grace clock off
+      streamEndedTs = null;
+      DEBUG && console.log('[MindM3rge] still streaming (stop btn present)');
+      return;
+    }
+    if (streamEndedTs === null) streamEndedTs = Date.now();
 
     const responses = findAll('response');
     if (responses.length === 0) { DEBUG && console.log('[MindM3rge] no .markdown yet'); return; }
@@ -758,14 +772,21 @@ function watchForResponse() {
     // is momentarily stable before the answer streams in). Short text must hold
     // longer — a lone ~217-char block is almost certainly a preamble, not the
     // answer. tryCapture is called ~1/s by checkInterval, so each tick ~= 1s.
+    const streamDoneGrace = streamEndedTs && (Date.now() - streamEndedTs > POST_STREAM_MAX_MS);
+
     const curLen = capturedText.length;
-    if (curLen !== settleLen) { settleLen = curLen; settleCount = 0; return; }
-    settleCount++;
-    const neededTicks = curLen < SHORT_GUARD_CHARS ? 4 : 2;
-    if (settleCount < neededTicks) {
-      DEBUG && console.log('[MindM3rge] settling (' + settleCount + '/' + neededTicks +
-                           ' @ len ' + curLen + '), waiting');
-      return;
+    if (!streamDoneGrace) {
+      if (curLen !== settleLen) { settleLen = curLen; settleCount = 0; return; }
+      settleCount++;
+      const neededTicks = curLen < SHORT_GUARD_CHARS ? 4 : 2;
+      if (settleCount < neededTicks) {
+        DEBUG && console.log('[MindM3rge] settling (' + settleCount + '/' + neededTicks +
+                             ' @ len ' + curLen + '), waiting');
+        return;
+      }
+    } else {
+      DEBUG && console.log('[MindM3rge] post-stream grace cap — capturing despite unsettled citation tail' +
+                           ' (len ' + curLen + ', ' + (Date.now() - streamEndedTs) + 'ms since stream end)');
     }
     // Re-verify streaming is really finished — the Stop button reappears if the
     // model resumed after a thinking pause.
