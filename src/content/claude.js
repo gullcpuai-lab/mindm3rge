@@ -129,22 +129,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // has been injected, so the next legitimate session works normally.
 let uploadInFlight = false;
 
-// Attachment-card selectors, most specific first. Use the FIRST selector that
-// matches anything — never a union or Math.max across selectors, and never the
-// broad [data-testid*="file"] wildcard (it over-counts and caused false 2s).
-const FILE_CARD_SELECTORS = [
-  '[data-testid="file-upload"]',
-  '[data-testid="file-thumbnail"]',
-];
+// Attachment counting. NOTE: [data-testid="file-upload"] is NOT a card — it is
+// the hidden <input type=file> itself (always exactly one, regardless of file
+// count). Counting it made multi-file uploads time out (count stuck at 1). The
+// real cards are [data-testid="file-thumbnail"], which Claude renders ~3x per
+// file for responsive layouts — so we key everything on DISTINCT filenames
+// (each thumbnail's <h3> text), never on raw element count.
+const FILE_THUMBNAIL_SELECTOR = '[data-testid="file-thumbnail"]';
 
-function getFileCards() {
-  for (const sel of FILE_CARD_SELECTORS) {
-    let els = [];
-    try { els = Array.from(document.querySelectorAll(sel)); } catch (e) {}
-    if (!els.length) continue;
-    return els.filter(el => !els.some(other => other !== el && other.contains(el)));
+function getThumbnailEls() {
+  try {
+    return Array.from(document.querySelectorAll(FILE_THUMBNAIL_SELECTOR));
+  } catch (e) { return []; }
+}
+
+function thumbnailFileName(el) {
+  try {
+    // Preferred: each thumbnail contains an <h3> whose text is exactly the filename.
+    const h3 = el.querySelector('h3');
+    if (h3 && h3.textContent && h3.textContent.trim()) return h3.textContent.trim();
+    // Fallback: textContent is "name.ext<metadata>" — take the leading filename token.
+    const text = (el.textContent || '').trim();
+    const m = text.match(/^\S+?\.[A-Za-z0-9]{1,8}/);
+    return m ? m[0] : text.slice(0, 80);
+  } catch (e) { return ''; }
+}
+
+function getUploadedFileNames() {
+  const names = new Set();
+  for (const el of getThumbnailEls()) {
+    const name = thumbnailFileName(el);
+    if (name) names.add(name);
   }
-  return [];
+  return names;
+}
+
+// One representative thumbnail per distinct filename (dedupes the ~3x render).
+function getFileCards() {
+  const byName = new Map();
+  for (const el of getThumbnailEls()) {
+    const name = thumbnailFileName(el);
+    if (name && !byName.has(name)) byName.set(name, el);
+  }
+  return Array.from(byName.values());
 }
 
 function cardIsBusy(card) {
@@ -158,42 +185,56 @@ function cardIsBusy(card) {
   }
 }
 
-// Gate: resolves true ONLY when exactly `expected` attachment cards are
-// rendered, none busy, and stable for ~1s. A settled over-count (double-attach)
-// fails fast; under-count keeps polling until timeout.
-async function waitForUploads(expected, fileNames, timeoutMs) {
+// Gate: resolves true ONLY when every expected filename is rendered as a
+// thumbnail, none of its copies is busy, and the present-name set is stable for
+// ~1s. Keys on DISTINCT filenames (never raw element count), so the 3x-per-file
+// render and the ever-present hidden <input> can't skew it. Over-attach of an
+// UNEXPECTED name (not in the pre-attach baseline) is logged, never fatal.
+async function waitForUploads(expectedNames, timeoutMs, baselineNames) {
   timeoutMs = timeoutMs || 45000;
   const POLL_MS = 250;
-  const STABLE_POLLS = 4; // ~1s of stability
+  const STABLE_POLLS = 4;
   const start = Date.now();
+  const expected = (expectedNames || []).map(n => String(n).trim()).filter(Boolean);
+  const baseline = baselineNames instanceof Set
+    ? baselineNames
+    : new Set(baselineNames || []);
   let stable = 0;
-  let lastCount = -1;
+  let lastKey = null;
   let lastBusy = true;
+  let lastPresent = [];
 
   while (Date.now() - start < timeoutMs) {
-    const cards = getFileCards();
-    const count = cards.length;
-    const busy = cards.some(cardIsBusy);
+    let present = new Set();
+    let busy = true;
+    try {
+      present = getUploadedFileNames();
+      // Busy if ANY rendered copy of any thumbnail is still uploading.
+      busy = getThumbnailEls().some(cardIsBusy);
+    } catch (e) { /* transient DOM error — counts as an unstable poll */ }
+    const presentArr = Array.from(present).sort();
+    const key = presentArr.join(' ');
+    const allPresent = expected.every(n => present.has(n));
 
-    if (count >= expected && !busy && count === lastCount) stable++;
+    if (allPresent && !busy && key === lastKey) stable++;
     else stable = 0;
-    lastCount = count;
+    lastKey = key;
     lastBusy = busy;
+    lastPresent = presentArr;
 
     if (stable >= STABLE_POLLS) {
-      if (count === expected) return true;
-      reportBroken('fileInput', {
-        context: 'DOUBLE-ATTACH: more file cards than files uploaded',
-        got: count, expected, fileNames,
-      });
-      return false;
+      const extras = presentArr.filter(n => !expected.includes(n) && !baseline.has(n));
+      if (extras.length) {
+        DEBUG && console.log('[MindM3rge] waitForUploads: unexpected extra file cards (not failing gate)', extras);
+      }
+      return true;
     }
     await new Promise(r => setTimeout(r, POLL_MS));
   }
 
   reportBroken('fileInput', {
-    context: 'upload gate timeout (incomplete or unstable attach)',
-    got: lastCount, expected, stillUploading: lastBusy, fileNames,
+    context: 'upload gate timeout (expected filenames not all rendered/settled)',
+    got: lastPresent, expected, stillUploading: lastBusy,
   });
   return false;
 }
@@ -216,9 +257,9 @@ async function uploadFilesThenPrompt(files, prompt) {
       }
     }
     if (fileInput) {
-      // Stale cards from a previous run count toward the expected total.
-      const baseline = getFileCards().length;
-      if (baseline > 0) DEBUG && console.log('[MindM3rge] pre-existing file cards:', baseline);
+      // Pre-existing files from a prior turn — excluded from the over-attach guard.
+      const baselineNames = getUploadedFileNames();
+      if (baselineNames.size > 0) DEBUG && console.log('[MindM3rge] pre-existing file cards:', [...baselineNames]);
 
       const dt = new DataTransfer();
       for (const f of files) {
@@ -234,9 +275,9 @@ async function uploadFilesThenPrompt(files, prompt) {
       // Claude's handler process the files twice (the double-attach bug).
       fileInput.dispatchEvent(new Event('change', { bubbles: true }));
 
-      const clean = await waitForUploads(baseline + files.length, files.map(f => f.name));
+      const clean = await waitForUploads(files.map(f => f.name), 45000, baselineNames);
       DEBUG && console.log('[MindM3rge] Claude upload gate:', clean ? 'clean' : 'FAILED',
-        '(expected', files.length, 'file(s), baseline', baseline + ')');
+        '(expected', files.length, 'file(s):', files.map(f => f.name).join(', ') + ')');
     } else {
       DEBUG && console.log('[MindM3rge] No file input found on Claude');
       reportBroken('fileInput', { context: 'upload attempt' });
