@@ -905,28 +905,50 @@ function watchForResponse() {
     reportBroken('response', { context: 'idle: no activity for 18 min' });
   }, 2000);
 
-  // Frozen-render recovery: ChatGPT's live paint stalls in a throttled hidden
-  // tab (froze at ~"1. AGREE" while the answer completed server-side). If the
-  // streaming indicator (.streaming-animation, folded into stopButton) is
-  // present but the text length is flat for 30s, hand off to the background
-  // for a reload + recapture. Self-clears once normal capture finishes.
+  // Frozen-render recovery — two triggers:
+  //  (a) flat-length: text length unchanged for 30s (45s at 0 chars) while streaming.
+  //  (b) stream-stuck watchdog: streaming indicator continuously present for
+  //      >STREAM_STUCK_MS while the main answer has set no NEW length max for
+  //      GROWTH_STALL_MS. Catches web-search citation-chip trickle (length keeps
+  //      changing, so (a) never fires) and is immune to hidden-tab setInterval
+  //      throttling because it compares wall-clock timestamps, not tick counts.
+  const STREAM_STUCK_MS = 150000;  // 2.5 min continuously streaming = abnormal for one answer
+  const GROWTH_STALL_MS = 40000;   // main answer must also have stopped meaningfully growing
   let _frozenLen = -1, _frozenTs = Date.now(), _frozenFired = false;
+  let _streamStartTs = null, _maxLen = 0, _lastGrowthTs = Date.now();
+  const _fireRecapture = (msg) => {
+    _frozenFired = true;
+    clearInterval(_frozenIv);
+    DEBUG && console.log('[MindM3rge] ' + msg);
+    try { chrome.runtime.sendMessage({ type: 'RELOAD_RECAPTURE', model: 'chatgpt' }, () => void chrome.runtime.lastError); } catch (e) {}
+  };
   const _frozenIv = setInterval(() => {
     if (_frozenFired || !isWaitingForResponse || captured) { clearInterval(_frozenIv); return; }
-    const streaming = !!find('stopButton').el;
+    const streaming = !!find('stopButton').el;   // .streaming-animation folded into stopButton
     const rs = findAll('response');
     const len = rs.length ? (rs[rs.length - 1].innerText || '').length : 0;
     const now = Date.now();
+
+    // Watchdog clock: when did streaming become continuously present?
+    if (!streaming) _streamStartTs = null;
+    else if (_streamStartTs === null) _streamStartTs = now;
+
+    // (b) hard cap — checked BEFORE growth bookkeeping so a slow trickle that
+    // bumps the max on every sparse throttled tick still reads as stalled here.
+    if (streaming && _streamStartTs !== null &&
+        now - _streamStartTs > STREAM_STUCK_MS &&
+        now - _lastGrowthTs > GROWTH_STALL_MS) {
+      _fireRecapture('stream stuck >2.5min (chatgpt) — requesting RELOAD_RECAPTURE');
+      return;
+    }
+
+    if (len > _maxLen) { _maxLen = len; _lastGrowthTs = now; }
+
+    // (a) original flat-length trigger
     if (len !== _frozenLen) { _frozenLen = len; _frozenTs = now; return; }
-    // A 0-char freeze (tab never painted any token) gets a longer grace so we
-    // don't fire during a normal pre-first-token thinking pause; a partial
-    // freeze (>=3 chars already rendered) is unambiguous and fires sooner.
     const _frozenThreshold = len >= 3 ? 30000 : 45000;
     if (streaming && now - _frozenTs > _frozenThreshold) {
-      _frozenFired = true;
-      clearInterval(_frozenIv);
-      DEBUG && console.log('[MindM3rge] frozen render (chatgpt) — requesting RELOAD_RECAPTURE');
-      try { chrome.runtime.sendMessage({ type: 'RELOAD_RECAPTURE', model: 'chatgpt' }, () => void chrome.runtime.lastError); } catch (e) {}
+      _fireRecapture('frozen render (chatgpt) — requesting RELOAD_RECAPTURE');
     }
   }, 2000);
 }
