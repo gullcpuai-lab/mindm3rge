@@ -904,6 +904,27 @@ function watchForResponse() {
     }
     reportBroken('response', { context: 'idle: no activity for 18 min' });
   }, 2000);
+
+  // Frozen-render recovery: ChatGPT's live paint stalls in a throttled hidden
+  // tab (froze at ~"1. AGREE" while the answer completed server-side). If the
+  // streaming indicator (.streaming-animation, folded into stopButton) is
+  // present but the text length is flat for 30s, hand off to the background
+  // for a reload + recapture. Self-clears once normal capture finishes.
+  let _frozenLen = -1, _frozenTs = Date.now(), _frozenFired = false;
+  const _frozenIv = setInterval(() => {
+    if (_frozenFired || !isWaitingForResponse || captured) { clearInterval(_frozenIv); return; }
+    const streaming = !!find('stopButton').el;
+    const rs = findAll('response');
+    const len = rs.length ? (rs[rs.length - 1].innerText || '').length : 0;
+    const now = Date.now();
+    if (len !== _frozenLen) { _frozenLen = len; _frozenTs = now; return; }
+    if (streaming && len >= 3 && now - _frozenTs > 30000) {
+      _frozenFired = true;
+      clearInterval(_frozenIv);
+      DEBUG && console.log('[MindM3rge] frozen render (chatgpt) — requesting RELOAD_RECAPTURE');
+      try { chrome.runtime.sendMessage({ type: 'RELOAD_RECAPTURE', model: 'chatgpt' }, () => void chrome.runtime.lastError); } catch (e) {}
+    }
+  }, 2000);
 }
 
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', model: 'chatgpt' });

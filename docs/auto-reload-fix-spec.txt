@@ -1,0 +1,30 @@
+You are Fable 5. Design a robust fix for a Chrome MV3 extension (MindM3rge, drives live ChatGPT/Claude/Gemini web tabs to capture responses). Output complete, paste-ready code + a short integration note.
+
+=== PROBLEM (root-caused live) ===
+All 3 model tabs freeze their live token-by-token STREAMING render very early (~5-13 chars, e.g. "1. AGREE") when the tab is a background/unfocused tab — Chrome throttles rAF/timers in hidden tabs so the streaming paint stalls. BUT the response COMPLETES on the model's servers. Proof: a full document reload of the frozen tab re-fetches the finished conversation as a STATIC page (renders instantly, no throttle) → the complete response appears. So the recovery is: detect the frozen render, reload the tab, then capture the completed static response.
+
+DETECTION SIGNATURE: the last assistant response text length is FROZEN (unchanged across ~20s) WHILE the model's streaming indicator is still present. Streaming indicators per model:
+- chatgpt: document.querySelector('.streaming-animation') (NOTE: ChatGPT has NO Stop button mid-stream in current UI)
+- claude: button[aria-label="Stop response"] OR svg.animate-spin (may linger)
+- gemini: (a "stop"/loading control; keep existing gemini streaming check)
+
+=== EXISTING ARCHITECTURE (do not rewrite, integrate) ===
+- Each content script (chatgpt.js/claude.js/gemini.js) runs watchForResponse() polling ~1/s, captures via RESPONSE_CAPTURED runtime message to the background. It already has a stop-button/streaming check and an idle timeout.
+- Background index.js: handleResponseCaptured(data, tab) records the turn + advances the session. MODEL_URLS maps model->url. There is a FORCE_CAPTURE message the background sends to a tab to grab the last response on demand: `chrome.tabs.sendMessage(tabId, {type:'FORCE_CAPTURE'})` returns {response}. handleForceCapture already does: find current model tab, sendMessage FORCE_CAPTURE, then handleResponseCaptured with the result.
+- getSession()/currentSession holds currentModel.
+
+=== FIX TO DESIGN ===
+A background-orchestrated "reload-and-recapture" triggered when a render freeze is detected. Two parts:
+
+1. CONTENT SCRIPT (per model) — in watchForResponse, add frozen-render detection: track lastLen + lastLenChangeTs. Each tick, if the streaming indicator IS present but the captured text length has NOT changed for FROZEN_RENDER_MS (propose ~18000ms) AND some minimal text exists, fire ONCE: chrome.runtime.sendMessage({type:'RELOAD_RECAPTURE', model:'<model>'}), set a local guard so it only fires once per turn, and stop its own watch (the background takes over). Do NOT capture the partial. Give the exact code to add and where, for chatgpt.js (using .streaming-animation), and describe the 1-line-different variants for claude.js/gemini.js.
+
+2. BACKGROUND (index.js) — add onMessage handler for RELOAD_RECAPTURE and an async handleReloadRecapture(model):
+   - verify session running and model === session.currentModel (ignore stale)
+   - find the model's tab (via MODEL_URLS domain query)
+   - chrome.tabs.reload(tabId)
+   - wait for the tab to finish loading: use chrome.tabs.onUpdated (status==='complete') with a timeout fallback, then an extra settle delay (~2500ms) for the static response + content script to render/inject
+   - then capture: sendMessage FORCE_CAPTURE to the reloaded tab (retry a couple times if the content script isn't ready yet), and if it returns a substantial response (>~200 chars), call handleResponseCaptured({model, response, capturePath:'reload-recapture'}, tab) to record + advance
+   - if FORCE_CAPTURE keeps failing, fall back to reading the DOM via chrome.scripting.executeScript in the tab (world:'MAIN') with a per-model selector, then handleResponseCaptured
+   - guard against re-entrancy (a reloadRecaptureInFlight set keyed by model)
+
+Keep it defensive (all chrome API calls wrapped), MV3-safe (no long-lived timers that break on SW sleep — do the reload+wait+capture in one awaited async chain kicked off by the message), and match the existing DEBUG logging style. Output: (1) the content-script addition for chatgpt.js + the claude/gemini variant notes, (2) the full handleReloadRecapture + its onMessage registration for index.js.

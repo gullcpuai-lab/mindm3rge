@@ -357,6 +357,27 @@ function watchForResponse() {
       }
     }
   }, 1000);
+
+  // Frozen-render recovery: if the streaming indicator is present but the
+  // response text length is flat for 30s, the tab's live paint has stalled
+  // (hidden-tab rAF/timer throttling) even though the answer completed
+  // server-side. Hand off to the background for a reload + recapture.
+  // Self-clears once the normal capture finishes (isWaitingForResponse=false).
+  let _frozenLen = -1, _frozenTs = Date.now(), _frozenFired = false;
+  const _frozenIv = setInterval(() => {
+    if (_frozenFired || !isWaitingForResponse) { clearInterval(_frozenIv); return; }
+    const streaming = !!find('stopButton').el;
+    const rs = findAll('response');
+    const len = rs.length ? (rs[rs.length - 1].innerText || '').length : 0;
+    const now = Date.now();
+    if (len !== _frozenLen) { _frozenLen = len; _frozenTs = now; return; }
+    if (streaming && len >= 3 && now - _frozenTs > 30000) {
+      _frozenFired = true;
+      clearInterval(_frozenIv);
+      DEBUG && console.log('[MindM3rge] frozen render (gemini) — requesting RELOAD_RECAPTURE');
+      try { chrome.runtime.sendMessage({ type: 'RELOAD_RECAPTURE', model: 'gemini' }, () => void chrome.runtime.lastError); } catch (e) {}
+    }
+  }, 2000);
 }
 
 chrome.runtime.sendMessage({ type: 'CONTENT_SCRIPT_READY', model: 'gemini' });

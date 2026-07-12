@@ -48,6 +48,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'RELOAD_RECAPTURE') {
+    // A content script detected a frozen streaming render (hidden-tab throttle):
+    // the answer completed server-side but the tab's live paint stalled. Reload
+    // the tab to re-fetch the finished response as a static page, then capture.
+    handleReloadRecapture(message.model).catch((e) =>
+      DEBUG && console.log('[MindM3rge] handleReloadRecapture error', e));
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (message.type === 'SELECTOR_ERROR') {
     handleSelectorError(message);
     return false;
@@ -860,6 +870,93 @@ async function handleManualResponse(responseText) {
     { skipGuard: true }
   );
   return { ok: true };
+}
+
+// Recover a response whose live render froze in a throttled background tab.
+// The response is complete server-side; a full reload re-fetches it as a static
+// page (renders even when throttled), then we capture it. Triggered by a
+// content script's RELOAD_RECAPTURE message. Falls back to a MAIN-world DOM
+// scrape if the reloaded content script isn't ready for FORCE_CAPTURE.
+const reloadRecaptureInFlight = new Set();
+const RELOAD_RECAPTURE_SELECTORS = {
+  chatgpt: '[data-message-author-role="assistant"]',
+  claude: '.standard-markdown',
+  gemini: 'message-content, .model-response-text',
+};
+
+async function handleReloadRecapture(model) {
+  if (reloadRecaptureInFlight.has(model)) return;
+  let session = await getSession();
+  if (!session || session.status !== 'running' || session.currentModel !== model) return;
+
+  reloadRecaptureInFlight.add(model);
+  try {
+    const url = MODEL_URLS[model];
+    if (!url) return;
+    const domain = `${url.split('/')[0]}//${url.split('/')[2]}/*`;
+    const tabs = await chrome.tabs.query({ url: domain });
+    if (!tabs.length) return;
+    const tab = tabs[0];
+    const tabId = tab.id;
+    DEBUG && console.log(`[MindM3rge] RELOAD_RECAPTURE(${model}) — reloading tab ${tabId} to recover frozen render`);
+
+    // Attach the load listener BEFORE reload so 'complete' can't be missed.
+    const loaded = new Promise((resolve) => {
+      let done = false;
+      const to = setTimeout(() => finish(false), 25000);
+      const lis = (tid, ci) => { if (tid === tabId && ci.status === 'complete') finish(true); };
+      const finish = (ok) => {
+        if (done) return; done = true; clearTimeout(to);
+        try { chrome.tabs.onUpdated.removeListener(lis); } catch (e) {}
+        resolve(ok);
+      };
+      try { chrome.tabs.onUpdated.addListener(lis); } catch (e) { finish(false); }
+    });
+    try { await chrome.tabs.reload(tabId); } catch (e) { return; }
+    await loaded;
+    await new Promise((r) => setTimeout(r, 3000)); // settle: static render + content-script inject
+
+    session = await getSession();
+    if (!session || session.status !== 'running' || session.currentModel !== model) return;
+
+    // capture path 1: FORCE_CAPTURE via the re-injected content script (retries)
+    let response = null;
+    for (let i = 0; i < 4 && !response; i++) {
+      try {
+        const res = await chrome.tabs.sendMessage(tabId, { type: 'FORCE_CAPTURE' });
+        if (res && res.response && res.response.length > 200) response = res.response;
+      } catch (e) { /* content script not ready yet — normal right after reload */ }
+      if (!response) await new Promise((r) => setTimeout(r, 1500));
+    }
+
+    // capture path 2: direct MAIN-world DOM scrape
+    if (!response) {
+      const sel = RELOAD_RECAPTURE_SELECTORS[model];
+      try {
+        const r = await chrome.scripting.executeScript({
+          target: { tabId }, world: 'MAIN',
+          func: (s) => { const n = document.querySelectorAll(s); return n.length ? (n[n.length - 1].innerText || '').trim() : null; },
+          args: [sel],
+        });
+        const scraped = r && r[0] && r[0].result;
+        if (scraped && scraped.length > 200) response = scraped;
+      } catch (e) {}
+    }
+
+    if (!response) {
+      DEBUG && console.log(`[MindM3rge] RELOAD_RECAPTURE(${model}) — no substantial response after reload; leaving to idle timeout`);
+      return;
+    }
+
+    // final staleness check — the reloaded content script may have captured it first
+    session = await getSession();
+    if (!session || session.status !== 'running' || session.currentModel !== model) return;
+
+    DEBUG && console.log(`[MindM3rge] RELOAD_RECAPTURE(${model}) — recovered ${response.length} chars`);
+    await handleResponseCaptured({ model, response, capturePath: 'reload-recapture' }, tab);
+  } finally {
+    reloadRecaptureInFlight.delete(model);
+  }
 }
 
 async function handleForceCapture() {
