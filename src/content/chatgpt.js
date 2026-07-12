@@ -198,6 +198,15 @@ const SELECTORS = {
     'button[aria-label="Stop streaming"]',
     'button[aria-label="Stop generating"]',
     'button[aria-label*="Stop"]',
+    // ChatGPT's newer UI shows NO Stop button while streaming — the composer
+    // switches to a "Start Voice" button and the answer streams with a cursor.
+    // The reliable "still generating" signal is the streaming-cursor class.
+    // Without this, `find('stopButton')` returned null mid-stream, capture
+    // mistook that for "done", and grabbed the partial text rendered so far
+    // (e.g. only "1. AGREE" / the first ~44 chars). Treat the streaming cursor
+    // as a stop signal so capture waits for the complete response.
+    '.result-streaming',
+    '.streaming-animation',
   ],
   fileInput: [
     '#upload-files', '#upload-photos', 'input[type="file"]',
